@@ -183,6 +183,15 @@ const ftattr_t	ftattrtab[] = {
 	{ FLDT_RMAPBTREC, "rmapbtrec", fp_sarray, (char *)rmapbt_rec_flds,
 	  SI(bitsz(struct xfs_rmap_rec)), 0, NULL, rmapbt_rec_flds },
 
+	{ FLDT_REFCBT_CRC, "refcntbt", NULL, (char *)refcbt_crc_flds, btblock_size,
+	  FTARG_SIZE, NULL, refcbt_crc_flds },
+	{ FLDT_REFCBTKEY, "refcntbtkey", fp_sarray, (char *)refcbt_key_flds,
+	  SI(bitsz(struct xfs_refcount_key)), 0, NULL, refcbt_key_flds },
+	{ FLDT_REFCBTPTR, "refcntbtptr", fp_num, "%u", SI(bitsz(xfs_refcount_ptr_t)),
+	  0, fa_agblock, NULL },
+	{ FLDT_REFCBTREC, "refcntbtrec", fp_sarray, (char *)refcbt_rec_flds,
+	  SI(bitsz(struct xfs_refcount_rec)), 0, NULL, refcbt_rec_flds },
+
 /* CRC field */
 	{ FLDT_CRC, "crc", fp_crc, "%#x (%s)", SI(bitsz(__uint32_t)),
 	  0, NULL, NULL },
