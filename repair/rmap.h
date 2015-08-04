@@ -39,6 +39,8 @@ extern int init_rmap_cursor(xfs_agnumber_t, struct xfs_slab_cursor **);
 extern void rmap_avoid_check(void);
 extern int check_rmaps(struct xfs_mount *, xfs_agnumber_t);
 
+extern int compute_refcounts(struct xfs_mount *, xfs_agnumber_t);
+
 extern void fix_freelist(struct xfs_mount *, xfs_agnumber_t, bool);
 extern void rmap_store_agflcount(struct xfs_mount *, xfs_agnumber_t, int);
 
