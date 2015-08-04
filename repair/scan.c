@@ -1257,6 +1257,8 @@ _("%s btree block claimed (state %d), agno %d, bno %d, suspect %d\n"),
 		}
 	}
 out:
+	if (suspect)
+		refcount_avoid_check();
 	return;
 }
 

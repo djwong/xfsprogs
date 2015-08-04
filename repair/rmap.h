@@ -40,6 +40,10 @@ extern void rmap_avoid_check(void);
 extern int check_rmaps(struct xfs_mount *, xfs_agnumber_t);
 
 extern int compute_refcounts(struct xfs_mount *, xfs_agnumber_t);
+extern size_t refcount_record_count(struct xfs_mount *, xfs_agnumber_t);
+extern int init_refcount_cursor(xfs_agnumber_t, struct xfs_slab_cursor **);
+extern void refcount_avoid_check(void);
+extern int check_refcounts(struct xfs_mount *, xfs_agnumber_t);
 
 extern void record_inode_reflink_flag(struct xfs_mount *, struct xfs_dinode *,
 	xfs_agnumber_t, xfs_agino_t, xfs_ino_t);
