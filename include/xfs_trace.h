@@ -178,4 +178,16 @@
 #define trace_xfs_rmap_free_extent_done(a,b,c,d,e)	((void) 0)
 #define trace_xfs_rmap_free_extent_error(a,b,c,d,e)	((void) 0)
 
+#define trace_xfs_rmapbt_delete(a...)			((void) 0)
+#define trace_xfs_rmapbt_insert(a...)			((void) 0)
+#define trace_xfs_rmap_insert(a...)			((void) 0)
+#define trace_xfs_rmap_delete(a...)			((void) 0)
+#define trace_xfs_rmap_move(a...)			((void) 0)
+#define trace_xfs_rmap_slide(a...)			((void) 0)
+#define trace_xfs_rmap_resize(a...)			((void) 0)
+#define trace_xfs_rmapbt_update(a...)			((void) 0)
+#define trace_xfs_rmap_combine(a...)			((void) 0)
+#define trace_xfs_rmap_lcombine(a...)			((void) 0)
+#define trace_xfs_rmap_rcombine(a...)			((void) 0)
+
 #endif /* __TRACE_H__ */

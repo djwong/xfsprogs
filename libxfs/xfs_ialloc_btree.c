@@ -95,7 +95,7 @@ xfs_inobt_alloc_block(
 	memset(&args, 0, sizeof(args));
 	args.tp = cur->bc_tp;
 	args.mp = cur->bc_mp;
-	args.owner = XFS_RMAP_OWN_INOBT;
+	XFS_RMAP_AG_OWNER(&args.oinfo, XFS_RMAP_OWN_INOBT);
 	args.fsbno = XFS_AGB_TO_FSB(args.mp, cur->bc_private.a.agno, sbno);
 	args.minlen = 1;
 	args.maxlen = 1;
@@ -127,9 +127,11 @@ xfs_inobt_free_block(
 {
 	xfs_fsblock_t		fsbno;
 	int			error;
+	struct xfs_owner_info	oinfo;
 
+	XFS_RMAP_AG_OWNER(&oinfo, XFS_RMAP_OWN_INOBT);
 	fsbno = XFS_DADDR_TO_FSB(cur->bc_mp, XFS_BUF_ADDR(bp));
-	error = xfs_free_extent(cur->bc_tp, fsbno, 1);
+	error = xfs_free_extent(cur->bc_tp, fsbno, 1, &oinfo);
 	if (error)
 		return error;
 

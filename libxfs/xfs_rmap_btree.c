@@ -36,37 +36,29 @@
 /*
  * Reverse map btree.
  *
- * This is a per-ag tree used to track the owner of a given extent. Owner
- * records are inserted when an extent is allocated, and removed when an extent
- * is freed. For existing filesystems, there can only be one owner of an extent,
- * usually an inode or some other metadata structure like a AG btree.
- *
- * Initial thoughts are that the
- * value of the owner field needs external flags to define what it means, and
- * hence we need a flags field in the record. This means the record is going to
- * be larger than 16 bytes (agbno,len,owner = 16 bytes), so maybe this isn't the
- * best idea. Initially just implement the owner field - we can probably steal
- * bits from the extent length field for type descriptors given that MAXEXTLEN
- * is only 21 bits if we want to store the type as well. Keep in mind that if we
- * want to do this there are still restrictions on the length of extents we
- * track in the rmap btree (see comments on xfs_rmap_free()).
+ * This is a per-ag tree used to track the owner(s) of a given extent. With
+ * reflink it is possible for there to be multiple owners, which is a departure
+ * from classic XFS. Owner records for data extents are inserted when the
+ * extent is mapped and removed when an extent is unmapped.  Owner records for
+ * all other block types (i.e. metadata) are inserted when an extent is
+ * allocated and removed when an extent is freed. There can only be one owner
+ * of a metadata extent, usually an inode or some other metadata structure like
+ * an AG btree.
  *
  * The rmap btree is part of the free space management, so blocks for the tree
  * are sourced from the agfl. Hence we need transaction reservation support for
  * this tree so that the freelist is always large enough. This also impacts on
  * the minimum space we need to leave free in the AG.
  *
- * The tree is ordered by block number - there's no need to order/search by
- * extent size for  online updating/management of the tree, and the reverse
- * lookups are going to be "who owns this block" and so are by-block ordering is
- * perfect for this.
- *
- * XXX: open question is how to handle blocks that are owned by the freespace
- * tree blocks. Right now they will be classified when they are moved to the
- * freelist or removed from the freelist. i.e. the extent allocation/freeing
- * will mark the extents allocated as owned by the AG.
+ * The tree is ordered by [ag block, owner, offset]. This is a large key size,
+ * but it is the only way to enforce unique keys when a block can be owned by
+ * multiple files at any offset. There's no need to order/search by extent
+ * size for online updating/management of the tree. It is intended that most
+ * reverse lookups will be to find the owner(s) of a particular block, or to
+ * try to recover tree and file data from corrupt primary metadata.
  */
-STATIC struct xfs_btree_cur *
+
+static struct xfs_btree_cur *
 xfs_rmapbt_dup_cursor(
 	struct xfs_btree_cur	*cur)
 {
@@ -177,6 +169,8 @@ xfs_rmapbt_init_key_from_rec(
 	union xfs_btree_rec	*rec)
 {
 	key->rmap.rm_startblock = rec->rmap.rm_startblock;
+	key->rmap.rm_owner = rec->rmap.rm_owner;
+	key->rmap.rm_offset = rec->rmap.rm_offset;
 }
 
 STATIC void
@@ -185,6 +179,8 @@ xfs_rmapbt_init_rec_from_key(
 	union xfs_btree_rec	*rec)
 {
 	rec->rmap.rm_startblock = key->rmap.rm_startblock;
+	rec->rmap.rm_owner = key->rmap.rm_owner;
+	rec->rmap.rm_offset = key->rmap.rm_offset;
 }
 
 STATIC void
@@ -195,6 +191,7 @@ xfs_rmapbt_init_rec_from_cur(
 	rec->rmap.rm_startblock = cpu_to_be32(cur->bc_rec.r.rm_startblock);
 	rec->rmap.rm_blockcount = cpu_to_be32(cur->bc_rec.r.rm_blockcount);
 	rec->rmap.rm_owner = cpu_to_be64(cur->bc_rec.r.rm_owner);
+	rec->rmap.rm_offset = cpu_to_be64(cur->bc_rec.r.rm_offset);
 }
 
 STATIC void
@@ -217,8 +214,16 @@ xfs_rmapbt_key_diff(
 {
 	struct xfs_rmap_irec	*rec = &cur->bc_rec.r;
 	struct xfs_rmap_key	*kp = &key->rmap;
+	__int64_t		d;
 
-	return (__int64_t)be32_to_cpu(kp->rm_startblock) - rec->rm_startblock;
+	d = (__int64_t)be32_to_cpu(kp->rm_startblock) - rec->rm_startblock;
+	if (d)
+		return d;
+	d = (__int64_t)be64_to_cpu(kp->rm_owner) - rec->rm_owner;
+	if (d)
+		return d;
+	d = (__int64_t)be64_to_cpu(kp->rm_offset) - rec->rm_offset;
+	return d;
 }
 
 static bool
@@ -242,7 +247,7 @@ xfs_rmapbt_verify(
 	 * from the on disk AGF. Again, we can only check against maximum limits
 	 * in this case.
 	 */
-	if (block->bb_magic!= cpu_to_be32(XFS_RMAP_CRC_MAGIC))
+	if (block->bb_magic != cpu_to_be32(XFS_RMAP_CRC_MAGIC))
 		return false;
 
 	if (!xfs_sb_version_hasrmapbt(&mp->m_sb))
@@ -313,7 +318,6 @@ const struct xfs_buf_ops xfs_rmapbt_buf_ops = {
 	.verify_write		= xfs_rmapbt_write_verify,
 };
 
-
 #if defined(DEBUG) || defined(XFS_WARN)
 STATIC int
 xfs_rmapbt_keys_inorder(
@@ -321,8 +325,16 @@ xfs_rmapbt_keys_inorder(
 	union xfs_btree_key	*k1,
 	union xfs_btree_key	*k2)
 {
-	return be32_to_cpu(k1->rmap.rm_startblock) <
-	       be32_to_cpu(k2->rmap.rm_startblock);
+	if (be32_to_cpu(k1->rmap.rm_startblock) <
+	    be32_to_cpu(k2->rmap.rm_startblock))
+		return 1;
+	if (be64_to_cpu(k1->rmap.rm_owner) <
+	    be64_to_cpu(k2->rmap.rm_owner))
+		return 1;
+	if (be64_to_cpu(k1->rmap.rm_offset) <=
+	    be64_to_cpu(k2->rmap.rm_offset))
+		return 1;
+	return 0;
 }
 
 STATIC int
@@ -331,9 +343,16 @@ xfs_rmapbt_recs_inorder(
 	union xfs_btree_rec	*r1,
 	union xfs_btree_rec	*r2)
 {
-	return be32_to_cpu(r1->rmap.rm_startblock) +
-		be32_to_cpu(r1->rmap.rm_blockcount) <=
-		be32_to_cpu(r2->rmap.rm_startblock);
+	if (be32_to_cpu(r1->rmap.rm_startblock) <
+	    be32_to_cpu(r2->rmap.rm_startblock))
+		return 1;
+	if (be64_to_cpu(r1->rmap.rm_offset) <
+	    be64_to_cpu(r2->rmap.rm_offset))
+		return 1;
+	if (be64_to_cpu(r1->rmap.rm_owner) <=
+	    be64_to_cpu(r2->rmap.rm_owner))
+		return 1;
+	return 0;
 }
 #endif	/* DEBUG */
 

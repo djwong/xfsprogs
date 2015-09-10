@@ -35,6 +35,7 @@
 #include "xfs_ialloc.h"
 #include "xfs_alloc.h"
 #include "xfs_bit.h"
+#include "xfs_rmap_btree.h"
 
 /*
  * Calculate the worst case log unit reservation for a given superblock
@@ -501,13 +502,18 @@ libxfs_bmap_finish(
 	xfs_bmap_free_item_t	*next;	/* next item on free list */
 	int			error;
 
+	error = xfs_rmap_finish((*tp)->t_mountp, tp, ip, &flist->xbf_rlist);
+	if (error)
+		return error;
+
 	if (flist->xbf_count == 0)
 		return 0;
 
 	for (free = flist->xbf_first; free != NULL; free = next) {
 		next = free->xbfi_next;
 		error = xfs_free_extent(*tp, free->xbfi_startblock,
-					free->xbfi_blockcount);
+					free->xbfi_blockcount,
+					&free->xbfi_oinfo);
 		if (error)
 			return error;
 		xfs_bmap_del_free(flist, NULL, free);
