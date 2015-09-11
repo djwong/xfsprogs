@@ -41,6 +41,7 @@ struct xfs_ag_rmap {
 };
 
 static struct xfs_ag_rmap *ag_rmaps;
+static bool rmapbt_suspect;
 
 /*
  * Compare rmap observations for array sorting.
@@ -432,3 +433,166 @@ dump_rmap(
 #else
 # define dump_rmap(m, a, r)
 #endif
+
+/*
+ * Return the number of rmap objects for an AG.
+ */
+size_t
+rmap_record_count(
+	struct xfs_mount		*mp,
+	xfs_agnumber_t		agno)
+{
+	return slab_count(ag_rmaps[agno].ar_rmaps);
+}
+
+/*
+ * Return a slab cursor that will return rmap objects in order.
+ */
+int
+init_rmap_cursor(
+	xfs_agnumber_t		agno,
+	struct xfs_slab_cursor	**cur)
+{
+	return init_slab_cursor(ag_rmaps[agno].ar_rmaps, rmap_compare, cur);
+}
+
+/*
+ * Disable the refcount btree check.
+ */
+void
+rmap_avoid_check(void)
+{
+	rmapbt_suspect = true;
+}
+
+/*
+ * Compare the observed reverse mappings against what's in the ag btree.
+ */
+int
+check_rmaps(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno)
+{
+	struct xfs_slab_cursor	*rm_cur;
+	struct xfs_btree_cur	*bt_cur = NULL;
+	int			error;
+	int			have;
+	int			i;
+	struct xfs_buf		*agbp = NULL;
+	struct xfs_rmap_irec	*rm_rec;
+	struct xfs_rmap_irec	tmp;
+	struct xfs_perag	*pag;		/* per allocation group data */
+
+	if (!xfs_sb_version_hasrmapbt(&mp->m_sb))
+		return 0;
+	if (rmapbt_suspect) {
+		if (no_modify && agno == 0)
+			do_warn(_("would rebuild corrupt rmap btrees.\n"));
+		return 0;
+	}
+
+	/* Create cursors to refcount structures */
+	error = init_rmap_cursor(agno, &rm_cur);
+	if (error)
+		return error;
+
+	error = xfs_alloc_read_agf(mp, NULL, agno, 0, &agbp);
+	if (error)
+		goto err;
+
+	/* Leave the per-ag data "uninitialized" since we rewrite it later */
+	pag = xfs_perag_get(mp, agno);
+	pag->pagf_init = 0;
+	xfs_perag_put(pag);
+
+	bt_cur = xfs_rmapbt_init_cursor(mp, NULL, agbp, agno);
+	if (!bt_cur) {
+		error = -ENOMEM;
+		goto err;
+	}
+
+	rm_rec = pop_slab_cursor(rm_cur);
+	while (rm_rec) {
+		/* Look for a rmap record in the btree */
+		error = xfs_rmap_lookup_eq(bt_cur, rm_rec->rm_startblock,
+				rm_rec->rm_blockcount, rm_rec->rm_owner,
+				rm_rec->rm_offset, &have);
+		if (error)
+			goto err;
+		if (!have) {
+			do_warn(
+_("Missing reverse-mapping record for (%u/%u) %slen %u owner %"PRIx64" \
+%s%soff %"PRIx64"\n"),
+				agno, rm_rec->rm_startblock,
+				XFS_RMAP_IS_UNWRITTEN(rm_rec->rm_blockcount) ?
+					_("unwritten ") : "",
+				XFS_RMAP_LEN(rm_rec->rm_blockcount),
+				rm_rec->rm_owner,
+				XFS_RMAP_IS_ATTR_FORK(rm_rec->rm_offset) ?
+					_("attr ") : "",
+				XFS_RMAP_IS_BMBT(rm_rec->rm_offset) ?
+					_("bmbt ") : "",
+				XFS_RMAP_OFF(rm_rec->rm_offset));
+			goto next_loop;
+		}
+
+		error = xfs_rmap_get_rec(bt_cur, &tmp, &i);
+		if (error)
+			goto err;
+		if (!i) {
+			do_warn(
+_("Unretrievable reverse-mapping record for (%u/%u) %slen %u owner %"PRIx64" \
+%s%soff %"PRIx64"\n"),
+				agno, rm_rec->rm_startblock,
+				XFS_RMAP_IS_UNWRITTEN(rm_rec->rm_blockcount) ?
+					_("unwritten ") : "",
+				XFS_RMAP_LEN(rm_rec->rm_blockcount),
+				rm_rec->rm_owner,
+				XFS_RMAP_IS_ATTR_FORK(rm_rec->rm_offset) ?
+					_("attr ") : "",
+				XFS_RMAP_IS_BMBT(rm_rec->rm_offset) ?
+					_("bmbt ") : "",
+				XFS_RMAP_OFF(rm_rec->rm_offset));
+			goto next_loop;
+		}
+
+		/* Compare each refcount observation against the btree's */
+		if (tmp.rm_startblock != rm_rec->rm_startblock ||
+		    tmp.rm_blockcount != rm_rec->rm_blockcount ||
+		    tmp.rm_owner != rm_rec->rm_owner ||
+		    tmp.rm_offset != rm_rec->rm_offset)
+			do_warn(
+_("Incorrect reverse-mapping: saw (%u/%u) %slen %u owner %"PRIx64" %s%soff \
+%"PRIx64"; should be (%u/%u) %slen %u owner %"PRIx64" %s%soff %"PRIx64"\n"),
+				agno, tmp.rm_startblock,
+				XFS_RMAP_IS_UNWRITTEN(tmp.rm_blockcount) ?
+					_("unwritten ") : "",
+				XFS_RMAP_LEN(tmp.rm_blockcount),
+				tmp.rm_owner,
+				XFS_RMAP_IS_ATTR_FORK(tmp.rm_offset) ?
+					_("attr ") : "",
+				XFS_RMAP_IS_BMBT(tmp.rm_offset) ?
+					_("bmbt ") : "",
+				XFS_RMAP_OFF(tmp.rm_offset),
+				agno, rm_rec->rm_startblock,
+				XFS_RMAP_IS_UNWRITTEN(rm_rec->rm_blockcount) ?
+					_("unwritten ") : "",
+				XFS_RMAP_LEN(rm_rec->rm_blockcount),
+				rm_rec->rm_owner,
+				XFS_RMAP_IS_ATTR_FORK(rm_rec->rm_offset) ?
+					_("attr ") : "",
+				XFS_RMAP_IS_BMBT(rm_rec->rm_offset) ?
+					_("bmbt ") : "",
+				XFS_RMAP_OFF(rm_rec->rm_offset));
+next_loop:
+		rm_rec = pop_slab_cursor(rm_cur);
+	}
+
+err:
+	if (bt_cur)
+		xfs_btree_del_cursor(bt_cur, XFS_BTREE_NOERROR);
+	if (agbp)
+		libxfs_putbuf(agbp);
+	free_slab_cursor(&rm_cur);
+	return 0;
+}

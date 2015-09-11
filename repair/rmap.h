@@ -33,4 +33,9 @@ extern int fold_raw_rmaps(struct xfs_mount *mp, xfs_agnumber_t agno);
 
 extern int add_fixed_ag_rmap_data(struct xfs_mount *, xfs_agnumber_t);
 
+extern size_t rmap_record_count(struct xfs_mount *, xfs_agnumber_t);
+extern int init_rmap_cursor(xfs_agnumber_t, struct xfs_slab_cursor **);
+extern void rmap_avoid_check(void);
+extern int check_rmaps(struct xfs_mount *, xfs_agnumber_t);
+
 #endif /* RMAP_H_ */

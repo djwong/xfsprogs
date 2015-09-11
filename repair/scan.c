@@ -29,6 +29,7 @@
 #include "bmap.h"
 #include "progress.h"
 #include "threads.h"
+#include "slab.h"
 #include "rmap.h"
 
 static xfs_mount_t	*mp = NULL;
@@ -808,7 +809,9 @@ scan_rmapbt(
 
 	if (magic != XFS_RMAP_CRC_MAGIC) {
 		name = "(unknown)";
-		assert(0);
+		hdr_errors++;
+		suspect++;
+		goto out;
 	}
 
 	if (be32_to_cpu(block->bb_magic) != magic) {
@@ -816,7 +819,7 @@ scan_rmapbt(
 			be32_to_cpu(block->bb_magic), name, agno, bno);
 		hdr_errors++;
 		if (suspect)
-			return;
+			goto out;
 	}
 
 	/*
@@ -834,7 +837,7 @@ scan_rmapbt(
 			level, be16_to_cpu(block->bb_level), name, agno, bno);
 		hdr_errors++;
 		if (suspect)
-			return;
+			goto out;
 	}
 
 	/* check for btree blocks multiply claimed */
@@ -844,7 +847,7 @@ scan_rmapbt(
 		do_warn(
 _("%s rmap btree block claimed (state %d), agno %d, bno %d, suspect %d\n"),
 				name, state, agno, bno, suspect);
-		return;
+		goto out;
 	}
 	set_bmap(agno, bno, XR_E_FS_MAP);
 
@@ -992,7 +995,7 @@ _("unknown block (%d,%d-%d) mismatch on %s tree, state - %d,%" PRIx64 "\n"),
 				}
 			}
 		}
-		return;
+		goto out;
 	}
 
 	/*
@@ -1020,7 +1023,7 @@ _("unknown block (%d,%d-%d) mismatch on %s tree, state - %d,%" PRIx64 "\n"),
 			mp->m_rmap_mnr[1], mp->m_rmap_mxr[1],
 			name, agno, bno);
 		if (suspect)
-			return;
+			goto out;
 		suspect++;
 	} else if (suspect) {
 		suspect = 0;
@@ -1043,6 +1046,10 @@ _("unknown block (%d,%d-%d) mismatch on %s tree, state - %d,%" PRIx64 "\n"),
 				    magic, priv, &xfs_rmapbt_buf_ops);
 		}
 	}
+
+out:
+	if (suspect)
+		rmap_avoid_check();
 }
 
 /*
