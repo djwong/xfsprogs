@@ -32,10 +32,14 @@ extern int add_bmbt_rmap(struct xfs_mount *, xfs_ino_t, int, xfs_fsblock_t);
 extern int fold_raw_rmaps(struct xfs_mount *mp, xfs_agnumber_t agno);
 
 extern int add_fixed_ag_rmap_data(struct xfs_mount *, xfs_agnumber_t);
+extern int store_ag_btree_rmap_data(struct xfs_mount *, xfs_agnumber_t);
 
 extern size_t rmap_record_count(struct xfs_mount *, xfs_agnumber_t);
 extern int init_rmap_cursor(xfs_agnumber_t, struct xfs_slab_cursor **);
 extern void rmap_avoid_check(void);
 extern int check_rmaps(struct xfs_mount *, xfs_agnumber_t);
+
+extern void fix_freelist(struct xfs_mount *, xfs_agnumber_t, bool);
+extern void rmap_store_agflcount(struct xfs_mount *, xfs_agnumber_t, int);
 
 #endif /* RMAP_H_ */
