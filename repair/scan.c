@@ -783,7 +783,29 @@ ino_issparse(
 
 	return xfs_inobt_is_sparse_disk(rp, offset);
 }
- 
+
+static bool
+rmap_in_order(
+	xfs_agblock_t	b,
+	xfs_agblock_t	lastblock,
+	int64_t		owner,
+	int64_t		lastowner,
+	int64_t		offset,
+	int64_t		lastoffset)
+{
+	if (b > lastblock)
+		return true;
+	else if (b < lastblock)
+		return false;
+
+	if (owner > lastowner)
+		return true;
+	else if (owner < lastowner)
+		return false;
+
+	return offset > lastoffset;
+}
+
 static void
 scan_rmapbt(
 	struct xfs_btree_block	*block,
@@ -910,7 +932,12 @@ advance:
 			} else {
 				bool bad;
 
-				bad = b <= lastblock;
+				if (xfs_sb_version_hasreflink(&mp->m_sb))
+					bad = !rmap_in_order(b, lastblock,
+							owner, lastowner,
+							offset, lastoffset);
+				else
+					bad = b <= lastblock;
 				if (bad)
 					do_warn(
 	_("out-of-order rmap btree record %d (%u %"PRId64" %"PRIx64" %u) block %u/%u\n"),
@@ -997,6 +1024,15 @@ _("in use block (%d,%d-%d) mismatch in %s tree, state - %d,%" PRIx64 "\n"),
 					 * be caught later.
 					 */
 					break;
+				case XR_E_INUSE1:
+					/*
+					 * multiple inode owners are ok with
+					 * reflink enabled
+					 */
+					if (xfs_sb_version_hasreflink(&mp->m_sb) &&
+					    !XFS_RMAP_NON_INODE_OWNER(owner))
+						break;
+					/* fall through */
 				default:
 					do_warn(
 _("unknown block (%d,%d-%d) mismatch on %s tree, state - %d,%" PRIx64 "\n"),
