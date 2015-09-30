@@ -37,6 +37,7 @@
 /* per-AG rmap object anchor */
 struct xfs_ag_rmap {
 	struct xfs_slab	*ar_rmaps;		/* rmap observations, p4 */
+	struct xfs_slab	*ar_raw_rmaps;		/* unmerged rmaps */
 };
 
 static struct xfs_ag_rmap *ag_rmaps;
@@ -103,6 +104,11 @@ init_rmaps(
 		if (error)
 			do_error(
 _("Insufficient memory while allocating reverse mapping slabs."));
+		error = init_slab(&ag_rmaps[i].ar_raw_rmaps,
+				  sizeof(struct xfs_rmap_irec));
+		if (error)
+			do_error(
+_("Insufficient memory while allocating raw metadata reverse mapping slabs."));
 	}
 }
 
@@ -120,6 +126,7 @@ free_rmaps(
 
 	for (i = 0; i < mp->m_sb.sb_agcount; i++) {
 		free_slab(&ag_rmaps[i].ar_rmaps);
+		free_slab(&ag_rmaps[i].ar_raw_rmaps);
 	}
 	free(ag_rmaps);
 	ag_rmaps = NULL;
@@ -162,6 +169,131 @@ add_rmap(
 	if (irec->br_state == XFS_EXT_UNWRITTEN)
 		rmap.rm_blockcount |= XFS_RMAP_LEN_UNWRITTEN;
 	return slab_add(rmaps, &rmap);
+}
+
+/* add a raw rmap; these will be merged later */
+static int
+__add_raw_rmap(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno,
+	xfs_agblock_t		agbno,
+	xfs_extlen_t		len,
+	uint64_t		owner,
+	bool			is_attr,
+	bool			is_bmbt)
+{
+	struct xfs_rmap_irec	rmap;
+
+	ASSERT(len != 0);
+	rmap.rm_owner = owner;
+	rmap.rm_offset = 0;
+	if (is_attr)
+		rmap.rm_offset |= XFS_RMAP_OFF_ATTR;
+	if (is_bmbt)
+		rmap.rm_offset |= XFS_RMAP_OFF_BMBT;
+	rmap.rm_startblock = agbno;
+	rmap.rm_blockcount = len;
+	return slab_add(ag_rmaps[agno].ar_raw_rmaps, &rmap);
+}
+
+/*
+ * Add a reverse mapping for a per-AG fixed metadata extent.
+ */
+int
+add_ag_rmap(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno,
+	xfs_agblock_t		agbno,
+	xfs_extlen_t		len,
+	uint64_t		owner)
+{
+	if (!needs_rmap_work(mp))
+		return 0;
+
+	ASSERT(agno != NULLAGNUMBER);
+	ASSERT(agno < mp->m_sb.sb_agcount);
+	ASSERT(agbno + len <= mp->m_sb.sb_agblocks);
+
+	return __add_raw_rmap(mp, agno, agbno, len, owner, false, false);
+}
+
+/*
+ * Decide if two reverse-mapping records can be merged.
+ */
+static bool
+mergeable_rmaps(
+	struct xfs_rmap_irec	*r1,
+	struct xfs_rmap_irec	*r2)
+{
+	if (r1->rm_startblock + r1->rm_blockcount != r2->rm_startblock)
+		return false;
+	if (r1->rm_owner != r2->rm_owner)
+		return false;
+	if (XFS_RMAP_NON_INODE_OWNER(r2->rm_owner))
+		return true;
+	/* must be an inode owner */
+	if (XFS_RMAP_IS_ATTR_FORK(r1->rm_offset) ^
+	    XFS_RMAP_IS_ATTR_FORK(r2->rm_offset))
+		return false;
+	if (XFS_RMAP_IS_BMBT(r1->rm_offset) || XFS_RMAP_IS_BMBT(r2->rm_offset))
+		return XFS_RMAP_IS_BMBT(r1->rm_offset) &&
+		       XFS_RMAP_IS_BMBT(r2->rm_offset);
+	return r1->rm_offset + r1->rm_blockcount == r2->rm_offset;
+}
+
+/*
+ * Merge adjacent raw rmaps and add them to the main rmap list.
+ */
+int
+fold_raw_rmaps(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno)
+{
+	struct xfs_slab_cursor	*cur = NULL;
+	struct xfs_rmap_irec	*prev, *rec;
+	size_t			old_sz;
+	int			error;
+
+	old_sz = slab_count(ag_rmaps[agno].ar_rmaps);
+	if (slab_count(ag_rmaps[agno].ar_raw_rmaps) == 0)
+		goto no_raw;
+	qsort_slab(ag_rmaps[agno].ar_raw_rmaps, rmap_compare);
+	error = init_slab_cursor(ag_rmaps[agno].ar_raw_rmaps, rmap_compare,
+			&cur);
+	if (error)
+		goto err;
+
+	prev = pop_slab_cursor(cur);
+	rec = pop_slab_cursor(cur);
+	while (rec) {
+		if (mergeable_rmaps(prev, rec)) {
+			prev->rm_blockcount += rec->rm_blockcount;
+			rec = pop_slab_cursor(cur);
+			continue;
+		}
+		error = slab_add(ag_rmaps[agno].ar_rmaps, prev);
+		if (error)
+			goto err;
+		prev = rec;
+		rec = pop_slab_cursor(cur);
+	}
+	if (prev) {
+		error = slab_add(ag_rmaps[agno].ar_rmaps, prev);
+		if (error)
+			goto err;
+	}
+	free_slab(&ag_rmaps[agno].ar_raw_rmaps);
+	error = init_slab(&ag_rmaps[agno].ar_raw_rmaps,
+			sizeof(struct xfs_rmap_irec));
+	if (error)
+		do_error(
+_("Insufficient memory while allocating raw metadata reverse mapping slabs."));
+no_raw:
+	if (old_sz)
+		qsort_slab(ag_rmaps[agno].ar_rmaps, rmap_compare);
+err:
+	free_slab_cursor(&cur);
+	return error;
 }
 
 #ifdef RMAP_DEBUG
