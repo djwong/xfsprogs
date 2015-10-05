@@ -127,4 +127,13 @@ int	__xfs_rmap_finish(struct xfs_mount *mp, struct xfs_trans *tp,
 int	xfs_rmap_finish(struct xfs_mount *mp, struct xfs_trans **tpp,
 			struct xfs_inode *ip, struct xfs_rmap_list *rlist);
 
+/* functions for changing rmap ownership */
+int xfs_rmap_change_extent_owner(struct xfs_mount *mp, struct xfs_inode *ip,
+		xfs_ino_t ino, xfs_fileoff_t isize, struct xfs_trans *tp,
+		int whichfork, xfs_ino_t new_owner,
+		struct xfs_rmap_list *rlist);
+int xfs_rmap_change_bmbt_owner(struct xfs_btree_cur *bcur, struct xfs_buf *bp,
+		struct xfs_owner_info *old_owner,
+		struct xfs_owner_info *new_owner);
+
 #endif	/* __XFS_RMAP_BTREE_H__ */

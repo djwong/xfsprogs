@@ -29,6 +29,7 @@
 #include "xfs_trace.h"
 #include "xfs_cksum.h"
 #include "xfs_alloc.h"
+#include "xfs_rmap_btree.h"
 
 /*
  * Cursor allocation zone.
@@ -4001,6 +4002,8 @@ xfs_btree_block_change_owner(
 	struct xfs_btree_block	*block;
 	struct xfs_buf		*bp;
 	union xfs_btree_ptr     rptr;
+	struct xfs_owner_info	old_oinfo, new_oinfo;
+	int			error;
 
 	/* do right sibling readahead */
 	xfs_btree_readahead(cur, level, XFS_BTCUR_RIGHTRA);
@@ -4011,6 +4014,20 @@ xfs_btree_block_change_owner(
 		block->bb_u.l.bb_owner = cpu_to_be64(new_owner);
 	else
 		block->bb_u.s.bb_owner = cpu_to_be32(new_owner);
+
+	/* change rmap owners (bmbt blocks only) */
+	if (cur->bc_flags & XFS_BTREE_LONG_PTRS) {
+		XFS_RMAP_INO_BMBT_OWNER(&old_oinfo,
+				cur->bc_private.b.ip->i_ino,
+				cur->bc_private.b.whichfork);
+		XFS_RMAP_INO_BMBT_OWNER(&new_oinfo,
+				new_owner,
+				cur->bc_private.b.whichfork);
+		error = xfs_rmap_change_bmbt_owner(cur, bp, &old_oinfo,
+				&new_oinfo);
+		if (error)
+			return error;
+	}
 
 	/*
 	 * If the block is a root block hosted in an inode, we might not have a

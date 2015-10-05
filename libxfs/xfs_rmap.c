@@ -1257,3 +1257,93 @@ xfs_rmap_resize(
 
 	return __xfs_rmap_add(mp, rlist, &ri);
 }
+
+/*
+ * Change ownership of a file's BMBT block reverse-mappings.
+ */
+int
+xfs_rmap_change_bmbt_owner(
+	struct xfs_btree_cur	*bcur,
+	struct xfs_buf		*bp,
+	struct xfs_owner_info	*old_owner,
+	struct xfs_owner_info	*new_owner)
+{
+	struct xfs_buf		*agfbp;
+	xfs_fsblock_t		fsbno;
+	xfs_agnumber_t		agno;
+	xfs_agblock_t		agbno;
+	int			error;
+
+	if (!xfs_sb_version_hasrmapbt(&bcur->bc_mp->m_sb) || !bp)
+		return 0;
+
+	fsbno = XFS_DADDR_TO_FSB(bcur->bc_mp, XFS_BUF_ADDR(bp));
+	agno = XFS_FSB_TO_AGNO(bcur->bc_mp, fsbno);
+	agbno = XFS_FSB_TO_AGBNO(bcur->bc_mp, fsbno);
+
+	error = xfs_read_agf(bcur->bc_mp, bcur->bc_tp, agno, 0, &agfbp);
+
+	error = xfs_rmap_free(bcur->bc_tp, agfbp, agno, agbno, 1, old_owner);
+	if (error)
+		goto err;
+
+	error = xfs_rmap_alloc(bcur->bc_tp, agfbp, agno, agbno, 1, new_owner);
+	if (error)
+		goto err;
+
+err:
+	xfs_trans_brelse(bcur->bc_tp, agfbp);
+	return error;
+}
+
+/*
+ * Change the ownership on a file's extent's reverse-mappings.
+ */
+int
+xfs_rmap_change_extent_owner(
+	struct xfs_mount	*mp,
+	struct xfs_inode	*ip,
+	xfs_ino_t		ino,
+	xfs_fileoff_t		isize,
+	struct xfs_trans	*tp,
+	int			whichfork,
+	xfs_ino_t		new_owner,
+	struct xfs_rmap_list	*rlist)
+{
+	struct xfs_bmbt_irec	imap;
+	int			nimaps;
+	xfs_fileoff_t		offset;
+	xfs_filblks_t		len;
+	int			flags = 0;
+	int			error;
+
+	if (!xfs_sb_version_hasrmapbt(&mp->m_sb))
+		return 0;
+
+	if (whichfork == XFS_ATTR_FORK)
+		flags |= XFS_BMAPI_ATTRFORK;
+
+	offset = 0;
+	len = XFS_B_TO_FSB(mp, isize);
+	nimaps = 1;
+	error = xfs_bmapi_read(ip, offset, len, &imap, &nimaps, flags);
+	while (error == 0 && nimaps > 0) {
+		if (imap.br_startblock == HOLESTARTBLOCK ||
+		    imap.br_startblock == DELAYSTARTBLOCK)
+			goto advloop;
+
+		error = xfs_rmap_delete(mp, rlist, ino, whichfork, &imap);
+		if (error)
+			break;
+		error = xfs_rmap_insert(mp, rlist, new_owner, whichfork, &imap);
+		if (error)
+			break;
+advloop:
+		offset += imap.br_blockcount;
+		len -= imap.br_blockcount;
+		nimaps = 1;
+		error = xfs_bmapi_read(ip, offset, len, &imap, &nimaps, flags);
+	}
+
+	return error;
+}
