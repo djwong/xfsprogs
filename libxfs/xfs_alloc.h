@@ -94,8 +94,6 @@ typedef unsigned int xfs_alloctype_t;
 #define XFS_ALLOC_AG_MAX_USABLE(mp)	\
 	((mp)->m_sb.sb_agblocks - XFS_BB_TO_FSB(mp, XFS_FSS_TO_BB(mp, 4)) - 7)
 
-xfs_extlen_t	xfs_prealloc_blocks(struct xfs_mount *mp);
-
 /*
  * Argument structure for xfs_alloc routines.
  * This is turned into a structure to avoid having 20 arguments passed
@@ -242,5 +240,7 @@ xfs_alloc_get_rec(
 int xfs_read_agf(struct xfs_mount *mp, struct xfs_trans *tp,
 			xfs_agnumber_t agno, int flags, struct xfs_buf **bpp);
 int xfs_alloc_fix_freelist(struct xfs_alloc_arg *args, int flags);
+
+xfs_extlen_t xfs_prealloc_blocks(struct xfs_mount *mp);
 
 #endif	/* __XFS_ALLOC_H__ */
