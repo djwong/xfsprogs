@@ -56,6 +56,7 @@ struct xfs_bmalloca {
 	bool			conv;	/* overwriting unwritten extents */
 	char			userdata;/* userdata mask */
 	int			flags;
+	struct xfs_rmap_list	*rlist;
 };
 
 /*
@@ -68,6 +69,13 @@ typedef struct xfs_bmap_free_item
 	xfs_extlen_t		xbfi_blockcount;/* number of blocks in extent */
 	struct xfs_bmap_free_item *xbfi_next;	/* link to next entry */
 } xfs_bmap_free_item_t;
+
+struct xfs_rmap_intent;
+
+struct xfs_rmap_list {
+	struct xfs_rmap_intent			*rl_first;
+	unsigned int				rl_count;
+};
 
 /*
  * Header for free extent list.
@@ -88,6 +96,7 @@ typedef	struct xfs_bmap_free
 	xfs_bmap_free_item_t	*xbf_first;	/* list of to-be-free extents */
 	int			xbf_count;	/* count of items on list */
 	int			xbf_low;	/* alloc in low mode */
+	struct xfs_rmap_list	xbf_rlist;	/* rmap intent list */
 } xfs_bmap_free_t;
 
 #define	XFS_BMAP_MAX_NMAP	4
@@ -143,6 +152,8 @@ static inline void xfs_bmap_init(xfs_bmap_free_t *flp, xfs_fsblock_t *fbp)
 {
 	((flp)->xbf_first = NULL, (flp)->xbf_count = 0, \
 		(flp)->xbf_low = 0, *(fbp) = NULLFSBLOCK);
+	flp->xbf_rlist.rl_first = NULL;
+	flp->xbf_rlist.rl_count = 0;
 }
 
 /*
