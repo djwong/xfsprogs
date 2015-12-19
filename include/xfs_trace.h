@@ -190,4 +190,7 @@
 #define trace_xfs_rmap_lcombine(a...)			((void) 0)
 #define trace_xfs_rmap_rcombine(a...)			((void) 0)
 
+#define trace_xfs_refcount_cow_increase(a...)		((void) 0)
+#define trace_xfs_refcount_cow_decrease(a...)		((void) 0)
+
 #endif /* __TRACE_H__ */
