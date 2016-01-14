@@ -64,6 +64,8 @@ typedef struct xfs_mount {
 	uint			m_bmap_dmnr[2];	/* XFS_BMAP_BLOCK_DMINRECS */
 	uint			m_inobt_mxr[2];	/* XFS_INOBT_BLOCK_MAXRECS */
 	uint			m_inobt_mnr[2];	/* XFS_INOBT_BLOCK_MINRECS */
+	uint			m_rmap_mxr[2];	/* max rmap btree records */
+	uint			m_rmap_mnr[2];	/* min rmap btree records */
 	uint			m_ag_maxlevels;	/* XFS_AG_MAXLEVELS */
 	uint			m_bm_maxlevels[2]; /* XFS_BM_MAXLEVELS */
 	uint			m_in_maxlevels;	/* XFS_IN_MAXLEVELS */

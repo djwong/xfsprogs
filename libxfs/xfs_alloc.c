@@ -26,6 +26,7 @@
 #include "xfs_mount.h"
 #include "xfs_inode.h"
 #include "xfs_btree.h"
+#include "xfs_rmap_btree.h"
 #include "xfs_alloc_btree.h"
 #include "xfs_alloc.h"
 #include "xfs_cksum.h"
@@ -631,6 +632,12 @@ xfs_alloc_ag_vextent(
 	ASSERT(args->len <= args->maxlen);
 	ASSERT(!args->wasfromfl || !args->isfl);
 	ASSERT(args->agbno % args->alignment == 0);
+
+	/* insert new block into the reverse map btree */
+	error = xfs_rmap_alloc(args->tp, args->agbp, args->agno,
+			       args->agbno, args->len, args->owner);
+	if (error)
+		return error;
 
 	if (!args->wasfromfl) {
 		error = xfs_alloc_update_counters(args->tp, args->pag,
@@ -2016,6 +2023,7 @@ xfs_alloc_fix_freelist(
 	memset(&targs, 0, sizeof(targs));
 	targs.tp = tp;
 	targs.mp = mp;
+	targs.owner = XFS_RMAP_OWN_AG;
 	targs.agbp = agbp;
 	targs.agno = args->agno;
 	targs.alignment = targs.minlen = targs.prod = targs.isfl = 1;
@@ -2659,6 +2667,8 @@ error0:
  * Free an extent.
  * Just break up the extent address and hand off to xfs_free_ag_extent
  * after fixing up the freelist.
+ *
+ * XXX: need owner of extent being freed
  */
 int				/* error */
 xfs_free_extent(
@@ -2700,10 +2710,27 @@ xfs_free_extent(
 		goto error0;
 	}
 
+	/* XXX: need owner */
+	error = xfs_rmap_free(tp, args.agbp, args.agno, args.agbno, len, 0);
+	if (error)
+		goto error0;
+
+	/* XXX: initially no multiple references, so just free it */
 	error = xfs_free_ag_extent(tp, args.agbp, args.agno, args.agbno, len, 0);
 	if (!error)
 		xfs_extent_busy_insert(tp, args.agno, args.agbno, len, 0);
 error0:
 	xfs_perag_put(args.pag);
 	return error;
+}
+
+xfs_extlen_t
+xfs_prealloc_blocks(
+	struct xfs_mount	*mp)
+{
+	if (xfs_sb_version_hasrmapbt(&mp->m_sb))
+		return XFS_RMAP_BLOCK(mp) + 1;
+	if (xfs_sb_version_hasfinobt(&mp->m_sb))
+		return XFS_FIBT_BLOCK(mp) + 1;
+	return XFS_IBT_BLOCK(mp) + 1;
 }

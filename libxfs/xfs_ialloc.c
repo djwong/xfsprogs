@@ -615,6 +615,7 @@ xfs_ialloc_ag_alloc(
 	    args.mp->m_ialloc_min_blks < args.mp->m_ialloc_blks)
 		do_sparse = prandom_u32() & 1;
 #endif
+	args.owner = XFS_RMAP_OWN_INODES;
 
 	/*
 	 * Locking will ensure that we don't have two callers in here

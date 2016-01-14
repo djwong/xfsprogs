@@ -171,4 +171,11 @@
 #define trace_xfs_perag_get_tag(a,b,c,d) ((c) = (c))
 #define trace_xfs_perag_put(a,b,c,d)	((c) = (c))
 
+#define trace_xfs_rmap_alloc_extent(a,b,c,d,e)		((void) 0)
+#define trace_xfs_rmap_alloc_extent_done(a,b,c,d,e)	((void) 0)
+#define trace_xfs_rmap_alloc_extent_error(a,b,c,d,e)	((void) 0)
+#define trace_xfs_rmap_free_extent(a,b,c,d,e)		((void) 0)
+#define trace_xfs_rmap_free_extent_done(a,b,c,d,e)	((void) 0)
+#define trace_xfs_rmap_free_extent_error(a,b,c,d,e)	((void) 0)
+
 #endif /* __TRACE_H__ */

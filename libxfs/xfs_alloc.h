@@ -72,6 +72,8 @@ typedef unsigned int xfs_alloctype_t;
  * needed freelist blocks is 4 fsbs _per AG_, a potential split of file's bmap
  * btree requires 1 fsb, so we set the number of set-aside blocks
  * to 4 + 4*agcount.
+ *
+ * XXX: this changes for rmapbt filesystems.
  */
 #define XFS_ALLOC_SET_ASIDE(mp)  (4 + ((mp)->m_sb.sb_agcount * 4))
 
@@ -86,10 +88,13 @@ typedef unsigned int xfs_alloctype_t;
  *
  * The AG headers are sector sized, so the amount of space they take up is
  * dependent on filesystem geometry. The others are all single blocks.
+ *
+ * XXX: this changes for rmapbt filesystems.
  */
 #define XFS_ALLOC_AG_MAX_USABLE(mp)	\
 	((mp)->m_sb.sb_agblocks - XFS_BB_TO_FSB(mp, XFS_FSS_TO_BB(mp, 4)) - 7)
 
+xfs_extlen_t	xfs_prealloc_blocks(struct xfs_mount *mp);
 
 /*
  * Argument structure for xfs_alloc routines.
@@ -123,6 +128,7 @@ typedef struct xfs_alloc_arg {
 	char		isfl;		/* set if is freelist blocks - !acctg */
 	char		userdata;	/* mask defining userdata treatment */
 	xfs_fsblock_t	firstblock;	/* io first block allocated */
+	uint64_t	owner;		/* owner of blocks being allocated */
 } xfs_alloc_arg_t;
 
 /*
