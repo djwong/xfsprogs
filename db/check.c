@@ -4386,6 +4386,7 @@ scanfunc_ino(
 	__u16			holemask;
 	xfs_agino_t		rino;
 	xfs_extlen_t		cblocks;
+	int			bufoff;
 
 	if (be32_to_cpu(block->bb_magic) != XFS_IBT_MAGIC &&
 	    be32_to_cpu(block->bb_magic) != XFS_IBT_CRC_MAGIC) {
@@ -4455,6 +4456,8 @@ scanfunc_ino(
 				rino = agino + startidx;
 				cblocks = (endidx - startidx) >>
 						mp->m_sb.sb_inopblog;
+				if (cblocks == 0)
+					cblocks = 1;
 
 				/* Check the sparse chunk alignment */
 				if (sparse &&
@@ -4468,8 +4471,9 @@ scanfunc_ino(
 				}
 
 				/* Check the block map */
-				set_dbmap(seqno, XFS_AGINO_TO_AGBNO(mp, rino),
-					cblocks, DBM_INODE, seqno, bno);
+				if (XFS_AGINO_TO_OFFSET(mp, rino) == 0)
+					set_dbmap(seqno, XFS_AGINO_TO_AGBNO(mp, rino),
+						cblocks, DBM_INODE, seqno, bno);
 
 				push_cur();
 				set_cur(&typtab[TYP_INODE],
@@ -4489,14 +4493,15 @@ scanfunc_ino(
 				}
 
 				/* Examine each inode in this chunk */
-				for (j = startidx; j < endidx; j++) {
+				bufoff = ((XFS_AGINO_TO_OFFSET(mp, rino) - startidx) << mp->m_sb.sb_inodelog);
+				for (j = startidx; j < endidx; j++, bufoff += (1 << mp->m_sb.sb_inodelog)) {
 					if (ino_issparse(&rp[i], j))
 						continue;
 					isfree = XFS_INOBT_IS_FREE_DISK(&rp[i], j);
 					if (isfree)
 						nfree++;
 					process_inode(agf, agino + j,
-						(xfs_dinode_t *)((char *)iocur_top->data + ((j - startidx) << mp->m_sb.sb_inodelog)),
+						(xfs_dinode_t *)((char *)iocur_top->data + bufoff),
 							isfree);
 				}
 				pop_cur();
