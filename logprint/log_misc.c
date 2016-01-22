@@ -606,6 +606,10 @@ xlog_print_trans_inode_core(xfs_icdinode_t *ip)
 	   ip->di_dmstate);
     printf(_("flags 0x%x gen 0x%x\n"),
 	   ip->di_flags, ip->di_gen);
+    if (ip->di_version == 3) {
+        printf(_("flags2 0x%llx cowextsize 0x%x\n"),
+            (unsigned long long)ip->di_flags2, ip->di_cowextsize);
+    }
 }
 
 void
