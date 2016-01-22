@@ -41,9 +41,10 @@ kmem_zone_t	*xfs_btree_cur_zone;
  */
 static const __uint32_t xfs_magics[2][XFS_BTNUM_MAX] = {
 	{ XFS_ABTB_MAGIC, XFS_ABTC_MAGIC, 0, XFS_BMAP_MAGIC, XFS_IBT_MAGIC,
-	  XFS_FIBT_MAGIC },
+	  XFS_FIBT_MAGIC, 0 },
 	{ XFS_ABTB_CRC_MAGIC, XFS_ABTC_CRC_MAGIC, XFS_RMAP_CRC_MAGIC,
-	  XFS_BMAP_CRC_MAGIC, XFS_IBT_CRC_MAGIC, XFS_FIBT_CRC_MAGIC }
+	  XFS_BMAP_CRC_MAGIC, XFS_IBT_CRC_MAGIC, XFS_FIBT_CRC_MAGIC,
+	  XFS_REFC_CRC_MAGIC }
 };
 #define xfs_btree_magic(cur) \
 	xfs_magics[!!((cur)->bc_flags & XFS_BTREE_CRC_BLOCKS)][cur->bc_btnum]
@@ -1128,6 +1129,9 @@ xfs_btree_set_refs(
 		break;
 	case XFS_BTNUM_RMAP:
 		xfs_buf_set_ref(bp, XFS_RMAP_BTREE_REF);
+		break;
+	case XFS_BTNUM_REFC:
+		xfs_buf_set_ref(bp, XFS_REFC_BTREE_REF);
 		break;
 	default:
 		ASSERT(0);
@@ -4184,4 +4188,90 @@ xfs_btree_calc_size(
 			maxrecs = limits[1];
 	}
 	return rval;
+}
+
+/* Count the blocks in a level of a btree and return the result in *nr. */
+STATIC int
+xfs_btree_count_level_blocks(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno,
+	const struct xfs_buf_ops	*buf_ops,
+	struct xfs_buf		*bp,
+	xfs_extlen_t		*nr)
+{
+	struct xfs_btree_block	*block;
+	xfs_fsblock_t		fsbno;
+	xfs_agblock_t		bno;
+	xfs_extlen_t		nr_blocks = 1;
+	int			error;
+
+	/* Jog rightward through this tree level */
+	block = XFS_BUF_TO_BLOCK(bp);
+	while (block) {
+		bno = be32_to_cpu(block->bb_u.s.bb_rightsib);
+		xfs_trans_brelse(NULL, bp);
+		if (bno == NULLAGBLOCK)
+			break;
+		fsbno = XFS_AGB_TO_FSB(mp, agno, bno);
+		error = xfs_trans_read_buf(mp, NULL, mp->m_ddev_targp,
+				XFS_FSB_TO_DADDR(mp, fsbno),
+				XFS_FSB_TO_BB(mp, 1), 0, &bp, buf_ops);
+		if (error)
+			goto err;
+		nr_blocks++;
+		block = XFS_BUF_TO_BLOCK(bp);
+	}
+	*nr += nr_blocks;
+err:
+	return error;
+}
+
+/* Count the blocks in a btree and return the result in *blocks. */
+int
+xfs_btree_count_blocks(
+	struct xfs_mount	*mp,
+	xfs_cb_getroot_pf	rootfn,
+	xfs_cb_getptr_pf	ptrfn,
+	const struct xfs_buf_ops	*buf_ops,
+	xfs_agnumber_t		agno,
+	xfs_extlen_t		*blocks)
+{
+	struct xfs_buf		*rootbp;
+	struct xfs_buf		*bp = NULL;
+	struct xfs_btree_block	*block = NULL;
+	int			level;
+	xfs_agblock_t		bno;
+	xfs_fsblock_t		fsbno;
+	int			error;
+	xfs_extlen_t		nr_blocks = 0;
+
+	error = rootfn(mp, agno, &rootbp, &level, &bno);
+	if (error)
+		return error;
+
+	/*
+	 * Go down the tree until leaf level is reached, following the first
+	 * pointer (leftmost) at each level.  At each level, count the number
+	 * of blocks in that level.
+	 */
+	while (level-- > 0) {
+		fsbno = XFS_AGB_TO_FSB(mp, agno, bno);
+		error = xfs_trans_read_buf(mp, NULL, mp->m_ddev_targp,
+				XFS_FSB_TO_DADDR(mp, fsbno),
+				XFS_FSB_TO_BB(mp, 1), 0, &bp, buf_ops);
+		if (error)
+			goto err;
+		block = XFS_BUF_TO_BLOCK(bp);
+		if (level)
+			bno = ptrfn(mp, block);
+		error = xfs_btree_count_level_blocks(mp, agno, buf_ops, bp,
+				&nr_blocks);
+		if (error)
+			goto err;
+	}
+
+	*blocks = nr_blocks;
+err:
+	xfs_trans_brelse(NULL, rootbp);
+	return error;
 }

@@ -33,6 +33,7 @@
 #include "xfs_trans.h"
 #include "xfs_bit.h"
 #include "xfs_refcount.h"
+#include "xfs_rmap_btree.h"
 
 /*
  * Look up the first record less than or equal to [bno, len] in the btree

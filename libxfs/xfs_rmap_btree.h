@@ -136,4 +136,11 @@ int xfs_rmap_change_bmbt_owner(struct xfs_btree_cur *bcur, struct xfs_buf *bp,
 		struct xfs_owner_info *old_owner,
 		struct xfs_owner_info *new_owner);
 
+extern xfs_extlen_t xfs_rmapbt_calc_size(struct xfs_mount *mp,
+		unsigned long long len);
+extern xfs_extlen_t xfs_rmapbt_max_size(struct xfs_mount *mp);
+
+extern int xfs_rmapbt_alloc_reserve_pool(struct xfs_mount *mp);
+extern int xfs_rmapbt_free_reserve_pool(struct xfs_mount *mp);
+
 #endif	/* __XFS_RMAP_BTREE_H__ */

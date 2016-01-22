@@ -225,6 +225,22 @@ group and so files within different directories will not interleave
 extents on disk. The reservation is only active while files are being
 created and written into the directory.
 .TP
+.SM "Bit 16 (0x10000) \- XFS_XFLAG_REFLINK"
+Shared blocks bit - if this flag is set, this file shares or has
+shared blocks with another file.  A write to a shared block employs
+copy on write to keep changes private to a file.
+.TP
+.SM "Bit 17 (0x20000) \- XFS_XFLAG_COWEXTSIZE"
+Copy on write extent size bit - if a CoW extent size value is set on
+the file then the allocator will allocate in multiples of the set size
+for this file when performing a copy on write operation.  (see
+.B XFS_IOC_FSSETXATTR
+below).
+
+If the file is a directory, setting the CoW extent size causes new
+files and directories created in the directory to inherit the
+parent's CoW extent size value.
+.TP
 .SM "Bit 31 (0x80000000) \- XFS_XFLAG_HASATTR"
 The file has extended attributes associated with it.
 .RE
@@ -246,7 +262,8 @@ The final argument points to a variable of type
 .BR "struct fsxattr" ,
 but only the following fields are used in this call:
 .BR fsx_xflags ,
-.B fsx_extsize
+.B fsx_extsize ,
+.B fsx_cowextsize ,
 and
 .BR fsx_projid .
 The
@@ -256,6 +273,12 @@ when the file is empty, except in the case of a directory where
 the extent size can be set at any time (this value is only used
 for regular file allocations, so should only be set on a directory
 in conjunction with the XFS_XFLAG_EXTSZINHERIT flag).
+
+The reflink flag can be cleared only if the file is empty; it is
+set automatically during a block sharing operation.  The CoW extent
+size can be changed at any time if the filesystem supports block
+sharing.  Setting the CoW extent size flag on a directory causes the
+CoW extent size hint to be propagated to new files.
 
 .TP
 .B XFS_IOC_GETBMAP

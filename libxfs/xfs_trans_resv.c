@@ -64,12 +64,15 @@ xfs_calc_buf_res(
 
 /*
  * Per-extent log reservation for the allocation btree changes
- * involved in freeing or allocating an extent. When rmap is not enabled,
- * there are only two trees that will be modified (free space trees), and when
- * rmap is enabled there will be three (freespace + rmap trees). The number of
- * blocks reserved is based on the formula:
+ * involved in freeing or allocating an extent.
  *
- * num trees * ((2 blocks/level * max depth) - 1)
+ * There are at least two trees that will be modified (free space trees), when
+ * rmap is enabled there will be an additional rmap tree, and when reflinks
+ * are enabled there will be a refcount btree as well
+ *
+ * The number of  blocks reserved is based on the formula:
+ *
+ *     num trees * ((2 blocks/level * max depth) - 1)
  */
 static uint
 xfs_allocfree_log_count(
@@ -79,6 +82,8 @@ xfs_allocfree_log_count(
 	uint		num_trees = 2;
 
 	if (xfs_sb_version_hasrmapbt(&mp->m_sb))
+		num_trees++;
+	if (xfs_sb_version_hasreflink(&mp->m_sb))
 		num_trees++;
 
 	return num_ops * num_trees * (2 * mp->m_ag_maxlevels - 1);

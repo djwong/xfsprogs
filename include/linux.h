@@ -146,6 +146,7 @@ typedef off64_t		xfs_off_t;
 typedef __uint64_t	xfs_ino_t;
 typedef __uint32_t	xfs_dev_t;
 typedef __int64_t	xfs_daddr_t;
+typedef __uint32_t	xfs_nlink_t;
 
 /**
  * Abstraction of mountpoints.
@@ -207,6 +208,8 @@ struct fsxattr {
 #define FS_XFLAG_FILESTREAM	0x00004000	/* use filestream allocator */
 #define FS_XFLAG_DAX		0x00008000	/* use DAX for IO */
 #define FS_XFLAG_HASATTR	0x80000000	/* no DIFLAG for this	*/
+#define FS_XFLAG_REFLINK	0x00010000	/* file is reflinked */
+#define FS_XFLAG_COWEXTSIZE	0x00020000	/* CoW extent size allocator hint */
 
 #define FS_IOC_FSGETXATTR     _IOR ('X', 31, struct fsxattr)
 #define FS_IOC_FSSETXATTR     _IOW ('X', 32, struct fsxattr)

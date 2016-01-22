@@ -18,6 +18,7 @@ PKGHFILES = xfs_fs.h \
 	xfs_log_format.h
 
 HFILES = \
+	xfs_ag_resv.h \
 	xfs_alloc.h \
 	xfs_alloc_btree.h \
 	xfs_attr_leaf.h \
@@ -36,6 +37,8 @@ HFILES = \
 	xfs_inode_fork.h \
 	xfs_quota_defs.h \
 	xfs_rmap_btree.h \
+	xfs_refcount.h \
+	xfs_refcount_btree.h \
 	xfs_sb.h \
 	xfs_shared.h \
 	xfs_trans_resv.h \
@@ -57,6 +60,7 @@ CFILES = cache.c \
 	rdwr.c \
 	trans.c \
 	util.c \
+	xfs_ag_resv.c \
 	xfs_alloc.c \
 	xfs_alloc_btree.c \
 	xfs_attr.c \
@@ -80,6 +84,8 @@ CFILES = cache.c \
 	xfs_inode_fork.c \
 	xfs_ialloc_btree.c \
 	xfs_log_rlimit.c \
+	xfs_refcount.c \
+	xfs_refcount_btree.c \
 	xfs_rtbitmap.c \
 	xfs_rmap.c \
 	xfs_rmap_btree.c \

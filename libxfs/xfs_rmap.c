@@ -1070,6 +1070,8 @@ __xfs_rmap_add(
 
 	if (!xfs_sb_version_hasrmapbt(&mp->m_sb))
 		return 0;
+	if (ri->ri_whichfork == XFS_COW_FORK)
+		return 0;
 
 	new = kmem_zalloc(sizeof(struct xfs_rmap_intent), KM_SLEEP | KM_NOFS);
 	*new = *ri;

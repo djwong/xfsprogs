@@ -31,7 +31,7 @@
 #include "xfs_rmap_btree.h"
 #include "xfs_trace.h"
 #include "xfs_cksum.h"
-
+#include "xfs_ag_resv.h"
 
 /*
  * Reverse map btree.
@@ -57,6 +57,14 @@
  * reverse lookups will be to find the owner(s) of a particular block, or to
  * try to recover tree and file data from corrupt primary metadata.
  */
+
+static bool
+xfs_rmapbt_need_reserve(
+	struct xfs_mount	*mp)
+{
+	return  xfs_sb_version_hasrmapbt(&mp->m_sb) &&
+		xfs_sb_version_hasreflink(&mp->m_sb);
+}
 
 static struct xfs_btree_cur *
 xfs_rmapbt_dup_cursor(
@@ -95,6 +103,7 @@ xfs_rmapbt_alloc_block(
 	union xfs_btree_ptr	*new,
 	int			*stat)
 {
+	struct xfs_perag	*pag;
 	int			error;
 	xfs_agblock_t		bno;
 
@@ -119,6 +128,12 @@ xfs_rmapbt_alloc_block(
 	xfs_trans_agbtree_delta(cur->bc_tp, 1);
 	new->s = cpu_to_be32(bno);
 
+	if (xfs_rmapbt_need_reserve(cur->bc_mp)) {
+		pag = xfs_perag_get(cur->bc_mp, cur->bc_private.a.agno);
+		xfs_ag_resv_alloc_block(pag->pagf_rmapbt_resv, cur->bc_tp, pag);
+		xfs_perag_put(pag);
+	}
+
 	XFS_BTREE_TRACE_CURSOR(cur, XBT_EXIT);
 	*stat = 1;
 	return 0;
@@ -131,6 +146,7 @@ xfs_rmapbt_free_block(
 {
 	struct xfs_buf		*agbp = cur->bc_private.a.agbp;
 	struct xfs_agf		*agf = XFS_BUF_TO_AGF(agbp);
+	struct xfs_perag	*pag;
 	xfs_agblock_t		bno;
 	int			error;
 
@@ -142,6 +158,12 @@ xfs_rmapbt_free_block(
 	xfs_extent_busy_insert(cur->bc_tp, be32_to_cpu(agf->agf_seqno), bno, 1,
 			      XFS_EXTENT_BUSY_SKIP_DISCARD);
 	xfs_trans_agbtree_delta(cur->bc_tp, -1);
+
+	if (xfs_rmapbt_need_reserve(cur->bc_mp)) {
+		pag = xfs_perag_get(cur->bc_mp, cur->bc_private.a.agno);
+		xfs_ag_resv_alloc_block(pag->pagf_rmapbt_resv, cur->bc_tp, pag);
+		xfs_perag_put(pag);
+	}
 
 	xfs_trans_binval(cur->bc_tp, bp);
 	return 0;
@@ -255,12 +277,12 @@ xfs_rmapbt_verify(
 	if (!xfs_btree_sblock_v5hdr_verify(bp))
 		return false;
 
-	/* level verification */
 	level = be16_to_cpu(block->bb_level);
 	if (pag && pag->pagf_init) {
 		if (level >= pag->pagf_levels[XFS_BTNUM_RMAPi])
 			return false;
-	} else if (level >= mp->m_ag_maxlevels)
+	} else if (!xfs_sb_version_hasreflink(&mp->m_sb) &&
+		  level >= maxlevels)
 		return false;
 
 	return xfs_btree_sblock_verify(bp, mp->m_rmap_mxr[level != 0]);
@@ -404,4 +426,148 @@ xfs_rmapbt_maxrecs(
 		return blocklen / sizeof(struct xfs_rmap_rec);
 	return blocklen /
 		(sizeof(struct xfs_rmap_key) + sizeof(xfs_rmap_ptr_t));
+}
+
+/* Calculate the refcount btree size for some records. */
+xfs_extlen_t
+xfs_rmapbt_calc_size(
+	struct xfs_mount	*mp,
+	unsigned long long	len)
+{
+	return xfs_btree_calc_size(mp, mp->m_rmap_mxr, len);
+}
+
+/*
+ * Calculate the maximum refcount btree size.
+ */
+xfs_extlen_t
+xfs_rmapbt_max_size(
+	struct xfs_mount	*mp)
+{
+	/* Bail out if we're uninitialized, which can happen in mkfs. */
+	if (mp->m_rmap_mxr[0] == 0)
+		return 0;
+
+	return xfs_rmapbt_calc_size(mp, mp->m_sb.sb_agblocks);
+}
+
+static int
+xfs_rmapbt_cb_getroot(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno,
+	struct xfs_buf		**bpp,
+	int			*level,
+	xfs_agblock_t		*bno)
+{
+	struct xfs_agf		*agfp;
+	int			error;
+
+	error = xfs_alloc_read_agf(mp, NULL, agno, 0, bpp);
+	if (error)
+		return error;
+	agfp = XFS_BUF_TO_AGF(*bpp);
+	*level = be32_to_cpu(agfp->agf_levels[XFS_BTNUM_RMAPi]);
+	*bno = be32_to_cpu(agfp->agf_roots[XFS_BTNUM_RMAPi]);
+	return 0;
+}
+
+static xfs_agblock_t
+xfs_rmapbt_cb_getptr(
+	struct xfs_mount	*mp,
+	struct xfs_btree_block	*block)
+{
+	__be32			*pp;
+
+	pp = XFS_RMAP_PTR_ADDR(block, 1, mp->m_rmap_mxr[1]);
+	return be32_to_cpu(*pp);
+}
+
+/* Count the blocks in the reference count tree. */
+static int
+xfs_rmapbt_count_blocks(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno,
+	xfs_extlen_t		*tree_blocks)
+{
+	return xfs_btree_count_blocks(mp, xfs_rmapbt_cb_getroot,
+			xfs_rmapbt_cb_getptr, &xfs_rmapbt_buf_ops, agno,
+			tree_blocks);
+}
+
+/*
+ * Create reserved block pools for each allocation group.
+ */
+int
+xfs_rmapbt_alloc_reserve_pool(
+	struct xfs_mount	*mp)
+{
+	xfs_agnumber_t		agno;
+	struct xfs_perag	*pag;
+	xfs_extlen_t		pool_len;
+	xfs_extlen_t		tree_len;
+	int			error = 0;
+	int			err;
+
+	if (!xfs_rmapbt_need_reserve(mp))
+		return 0;
+
+	/* Reserve 1% of the AG or enough for 1 block per record. */
+	pool_len = max(mp->m_sb.sb_agblocks / 100, xfs_rmapbt_max_size(mp));
+	xfs_ag_resv_type_init(mp, pool_len);
+
+	for (agno = 0; agno < mp->m_sb.sb_agcount; agno++) {
+		pag = xfs_perag_get(mp, agno);
+		if (pag->pagf_rmapbt_resv) {
+			xfs_perag_put(pag);
+			continue;
+		}
+		tree_len = 0;
+		err = xfs_rmapbt_count_blocks(mp, agno, &tree_len);
+		if (err && !error)
+			error = err;
+		err = xfs_ag_resv_init(mp, pag, pool_len, tree_len,
+				XFS_AG_RESV_AGFL, &pag->pagf_rmapbt_resv);
+		xfs_perag_put(pag);
+		if (err && !error)
+			error = err;
+	}
+
+	return error;
+}
+
+/*
+ * Free the reference count btree pools.
+ */
+int
+xfs_rmapbt_free_reserve_pool(
+	struct xfs_mount	*mp)
+{
+	xfs_agnumber_t		agno;
+	struct xfs_perag	*pag;
+	xfs_extlen_t		pool_len, i;
+	int			error = 0;
+	int			err;
+
+	if (!xfs_rmapbt_need_reserve(mp))
+		return 0;
+
+	pool_len = 0;
+	for (agno = 0; agno < mp->m_sb.sb_agcount; agno++) {
+		pag = xfs_perag_get(mp, agno);
+		if (!pag->pagf_rmapbt_resv) {
+			xfs_perag_put(pag);
+			continue;
+		}
+		i = xfs_ag_resv_blocks(pag->pagf_rmapbt_resv);
+		if (pool_len < i)
+			pool_len = i;
+		err = xfs_ag_resv_free(pag->pagf_rmapbt_resv, pag);
+		pag->pagf_rmapbt_resv = NULL;
+		xfs_perag_put(pag);
+		if (err && !error)
+			error = err;
+	}
+	xfs_ag_resv_type_free(mp, pool_len);
+
+	return error;
 }

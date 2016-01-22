@@ -66,6 +66,8 @@ typedef struct xfs_mount {
 	uint			m_inobt_mnr[2];	/* XFS_INOBT_BLOCK_MINRECS */
 	uint			m_rmap_mxr[2];	/* max rmap btree records */
 	uint			m_rmap_mnr[2];	/* min rmap btree records */
+	uint			m_refc_mxr[2];	/* max refc btree records */
+	uint			m_refc_mnr[2];	/* min refc btree records */
 	uint			m_ag_maxlevels;	/* XFS_AG_MAXLEVELS */
 	uint			m_bm_maxlevels[2]; /* XFS_BM_MAXLEVELS */
 	uint			m_in_maxlevels;	/* XFS_IN_MAXLEVELS */
@@ -140,6 +142,12 @@ typedef struct xfs_perag {
 	xfs_agino_t	pagl_leftrec;
 	xfs_agino_t	pagl_rightrec;
 	int		pagb_count;	/* pagb slots in use */
+	__uint8_t	pagf_refcount_level;
+
+	xfs_extlen_t	pag_reserved_blocks;
+	xfs_extlen_t	pag_agfl_reserved_blocks;
+	struct xfs_ag_resv	*pagf_refcountbt_resv;
+	struct xfs_ag_resv	*pagf_rmapbt_resv;
 } xfs_perag_t;
 
 #define LIBXFS_MOUNT_DEBUGGER		0x0001
