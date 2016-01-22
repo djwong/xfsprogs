@@ -270,6 +270,7 @@ libxfs_ialloc(
 		ip->i_d.di_changecount = 1;
 		ip->i_d.di_lsn = 0;
 		ip->i_d.di_flags2 = 0;
+		ip->i_d.di_cowextsize = pip ? 0 : fsx->fsx_cowextsize;
 		memset(&(ip->i_d.di_pad2[0]), 0, sizeof(ip->i_d.di_pad2));
 		ip->i_d.di_crtime = ip->i_d.di_mtime;
 	}
@@ -311,6 +312,15 @@ libxfs_ialloc(
 			if (pip->i_d.di_flags & XFS_DIFLAG_PROJINHERIT)
 				di_flags |= XFS_DIFLAG_PROJINHERIT;
 			ip->i_d.di_flags |= di_flags;
+		}
+		if (pip &&
+		    (pip->i_d.di_flags2 & XFS_DIFLAG2_ANY) &&
+		    pip->i_d.di_version == 3 &&
+		    ip->i_d.di_version == 3) {
+			if (pip->i_d.di_flags2 & XFS_DIFLAG2_COWEXTSIZE) {
+				ip->i_d.di_flags2 |= XFS_DIFLAG2_COWEXTSIZE;
+				ip->i_d.di_cowextsize = pip->i_d.di_cowextsize;
+			}
 		}
 		/* FALLTHROUGH */
 	case S_IFLNK:
@@ -404,6 +414,8 @@ libxfs_iprint(
 	printf("   di_size %llu\n", (unsigned long long)dip->di_size);
 	printf("   di_gen %x\n", dip->di_gen);
 	printf("   di_extsize %d\n", dip->di_extsize);
+	if (dip->di_version == 3)
+		printf("   di_cowextsize %d\n", dip->di_cowextsize);
 	printf("   di_flags %x\n", dip->di_flags);
 	printf("   di_nblocks %llu\n", (unsigned long long)dip->di_nblocks);
 }
