@@ -44,8 +44,10 @@ static cmdinfo_t statfs_cmd;
 static cmdinfo_t chproj_cmd;
 static cmdinfo_t lsproj_cmd;
 static cmdinfo_t extsize_cmd;
+static cmdinfo_t cowextsize_cmd;
 static prid_t prid;
 static long extsize;
+static long cowextsize;
 
 off64_t
 filesize(void)
@@ -123,6 +125,7 @@ stat_f(
 		printxattr(fsx.fsx_xflags, verbose, 0, file->name, 1, 1);
 		printf(_("fsxattr.projid = %u\n"), fsx.fsx_projid);
 		printf(_("fsxattr.extsize = %u\n"), fsx.fsx_extsize);
+		printf(_("fsxattr.cowextsize = %u\n"), fsx.fsx_cowextsize);
 		printf(_("fsxattr.nextents = %u\n"), fsx.fsx_nextents);
 		printf(_("fsxattr.naextents = %u\n"), fsxa.fsx_nextents);
 	}
@@ -694,6 +697,156 @@ extsize_f(
 	return 0;
 }
 
+static void
+cowextsize_help(void)
+{
+	printf(_(
+"\n"
+" report or modify preferred CoW extent size (in bytes) for the current path\n"
+"\n"
+" -R -- recursively descend (useful when current path is a directory)\n"
+" -D -- recursively descend, only modifying cowextsize on directories\n"
+"\n"));
+}
+
+static int
+get_cowextsize(const char *path, int fd)
+{
+	struct fsxattr	fsx;
+
+	if ((xfsctl(path, fd, XFS_IOC_FSGETXATTR, &fsx)) < 0) {
+		printf("%s: XFS_IOC_FSGETXATTR %s: %s\n",
+			progname, path, strerror(errno));
+		return 0;
+	}
+	printf("[%u] %s\n", fsx.fsx_cowextsize, path);
+	return 0;
+}
+
+static int
+set_cowextsize(const char *path, int fd, long extsz)
+{
+	struct fsxattr	fsx;
+	struct stat64	stat;
+
+	if (fstat64(fd, &stat) < 0) {
+		perror("fstat64");
+		return 0;
+	}
+	if ((xfsctl(path, fd, XFS_IOC_FSGETXATTR, &fsx)) < 0) {
+		printf("%s: XFS_IOC_FSGETXATTR %s: %s\n",
+			progname, path, strerror(errno));
+		return 0;
+	}
+
+	if (S_ISREG(stat.st_mode) || S_ISDIR(stat.st_mode)) {
+		fsx.fsx_xflags |= XFS_XFLAG_COWEXTSIZE;
+	} else {
+		printf(_("invalid target file type - file %s\n"), path);
+		return 0;
+	}
+	fsx.fsx_cowextsize = extsz;
+
+	if ((xfsctl(path, fd, XFS_IOC_FSSETXATTR, &fsx)) < 0) {
+		printf("%s: XFS_IOC_FSSETXATTR %s: %s\n",
+			progname, path, strerror(errno));
+		return 0;
+	}
+
+	return 0;
+}
+
+static int
+get_cowextsize_callback(
+	const char		*path,
+	const struct stat	*stat,
+	int			status,
+	struct FTW		*data)
+{
+	int			fd;
+
+	if (recurse_dir && !S_ISDIR(stat->st_mode))
+		return 0;
+
+	if ((fd = open(path, O_RDONLY)) == -1) {
+		fprintf(stderr, _("%s: cannot open %s: %s\n"),
+			progname, path, strerror(errno));
+	} else {
+		get_cowextsize(path, fd);
+		close(fd);
+	}
+	return 0;
+}
+
+static int
+set_cowextsize_callback(
+	const char		*path,
+	const struct stat	*stat,
+	int			status,
+	struct FTW		*data)
+{
+	int			fd;
+
+	if (recurse_dir && !S_ISDIR(stat->st_mode))
+		return 0;
+
+	if ((fd = open(path, O_RDONLY)) == -1) {
+		fprintf(stderr, _("%s: cannot open %s: %s\n"),
+			progname, path, strerror(errno));
+	} else {
+		set_cowextsize(path, fd, cowextsize);
+		close(fd);
+	}
+	return 0;
+}
+
+static int
+cowextsize_f(
+	int		argc,
+	char		**argv)
+{
+	size_t			blocksize, sectsize;
+	int			c;
+
+	recurse_all = recurse_dir = 0;
+	init_cvtnum(&blocksize, &sectsize);
+	while ((c = getopt(argc, argv, "DR")) != EOF) {
+		switch (c) {
+		case 'D':
+			recurse_all = 0;
+			recurse_dir = 1;
+			break;
+		case 'R':
+			recurse_all = 1;
+			recurse_dir = 0;
+			break;
+		default:
+			return command_usage(&cowextsize_cmd);
+		}
+	}
+
+	if (optind < argc) {
+		cowextsize = (long)cvtnum(blocksize, sectsize, argv[optind]);
+		if (cowextsize < 0) {
+			printf(_("non-numeric cowextsize argument -- %s\n"),
+				argv[optind]);
+			return 0;
+		}
+	} else {
+		cowextsize = -1;
+	}
+
+	if (recurse_all || recurse_dir)
+		nftw(file->name, (extsize >= 0) ?
+			set_cowextsize_callback : get_cowextsize_callback,
+			100, FTW_PHYS | FTW_MOUNT | FTW_DEPTH);
+	else if (cowextsize >= 0)
+		set_cowextsize(file->name, file->fd, cowextsize);
+	else
+		get_cowextsize(file->name, file->fd);
+	return 0;
+}
+
 static int
 statfs_f(
 	int			argc,
@@ -815,6 +968,16 @@ open_init(void)
 		_("get/set preferred extent size (in bytes) for the open file");
 	extsize_cmd.help = extsize_help;
 
+	cowextsize_cmd.name = "cowextsize";
+	cowextsize_cmd.cfunc = cowextsize_f;
+	cowextsize_cmd.args = _("[-D | -R] [cowextsize]");
+	cowextsize_cmd.argmin = 0;
+	cowextsize_cmd.argmax = -1;
+	cowextsize_cmd.flags = CMD_NOMAP_OK;
+	cowextsize_cmd.oneline =
+		_("get/set preferred CoW extent size (in bytes) for the open file");
+	cowextsize_cmd.help = cowextsize_help;
+
 	add_command(&open_cmd);
 	add_command(&stat_cmd);
 	add_command(&close_cmd);
@@ -822,4 +985,5 @@ open_init(void)
 	add_command(&chproj_cmd);
 	add_command(&lsproj_cmd);
 	add_command(&extsize_cmd);
+	add_command(&cowextsize_cmd);
 }

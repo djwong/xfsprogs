@@ -48,9 +48,11 @@ static struct xflags {
 	{ FS_XFLAG_NODEFRAG,		"f", "no-defrag"	},
 	{ FS_XFLAG_FILESTREAM,		"S", "filestream"	},
 	{ FS_XFLAG_DAX,			"x", "dax"		},
+	{ FS_XFLAG_REFLINK,		"R", "reflink"		},
+	{ FS_XFLAG_COWEXTSIZE,		"C", "cowextsize"	},
 	{ 0, NULL, NULL }
 };
-#define CHATTR_XFLAG_LIST	"r"/*p*/"iasAdtPneEfSx"
+#define CHATTR_XFLAG_LIST	"r"/*p*/"iasAdtPneEfSxRC"
 
 static void
 lsattr_help(void)
@@ -75,6 +77,8 @@ lsattr_help(void)
 " f -- do not include this file when defragmenting the filesystem\n"
 " S -- enable filestreams allocator for this directory\n"
 " x -- Use direct access (DAX) for data in this file\n"
+" R -- file data blocks may be shared with another file\n"
+" C -- for files with shared blocks, observe the inode CoW extent size value\n"
 "\n"
 " Options:\n"
 " -R -- recursively descend (useful when current file is a directory)\n"
@@ -111,6 +115,8 @@ chattr_help(void)
 " +/-f -- set/clear the no-defrag flag\n"
 " +/-S -- set/clear the filestreams allocator flag\n"
 " +/-x -- set/clear the direct access (DAX) flag\n"
+" +/-R -- set/clear the reflink flag\n"
+" +/-C -- set/clear the CoW extent-size flag\n"
 " Note1: user must have certain capabilities to modify immutable/append-only.\n"
 " Note2: immutable/append-only files cannot be deleted; removing these files\n"
 "        requires the immutable/append-only flag to be cleared first.\n"
