@@ -3953,10 +3953,15 @@ scan_ag(
 		be32_to_cpu(agf->agf_levels[XFS_BTNUM_CNT]),
 		1, scanfunc_cnt, TYP_CNTBT);
 	if (agf->agf_roots[XFS_BTNUM_RMAP]) {
+		typnm_t	btype;
+		if (xfs_sb_version_hasrmapxbt(&mp->m_sb))
+			btype = TYP_RMAPXBT;
+		else
+			btype = TYP_RMAPBT;
 		scan_sbtree(agf,
 			be32_to_cpu(agf->agf_roots[XFS_BTNUM_RMAP]),
 			be32_to_cpu(agf->agf_levels[XFS_BTNUM_RMAP]),
-			1, scanfunc_rmap, TYP_RMAPBT);
+			1, scanfunc_rmap, btype);
 	}
 	if (agf->agf_refcount_root) {
 		scan_sbtree(agf,
@@ -4732,18 +4737,29 @@ scanfunc_rmap(
 	xfs_rmap_ptr_t		*pp;
 	struct xfs_rmap_rec	*rp;
 	xfs_agblock_t		lastblock;
+	typnm_t			btype;
+	__u32			magic;
+	char			*treename;
 
-	if (be32_to_cpu(block->bb_magic) != XFS_RMAP_CRC_MAGIC) {
-		dbprintf(_("bad magic # %#x in rmapbt block %u/%u\n"),
-			be32_to_cpu(block->bb_magic), seqno, bno);
+	if (xfs_sb_version_hasrmapxbt(&mp->m_sb)) {
+		magic = XFS_RMAPX_CRC_MAGIC;
+		treename = "rmapxbt";
+	} else {
+		magic = XFS_RMAP_CRC_MAGIC;
+		treename = "rmapbt";
+	}
+	if (be32_to_cpu(block->bb_magic) != magic) {
+		dbprintf(_("bad magic # %#x in %s block %u/%u\n"),
+			be32_to_cpu(block->bb_magic), treename, seqno, bno);
 		serious_error++;
 		return;
 	}
 	if (be16_to_cpu(block->bb_level) != level) {
 		if (!sflag)
-			dbprintf(_("expected level %d got %d in rmapbt block "
+			dbprintf(_("expected level %d got %d in %s block "
 				 "%u/%u\n"),
-				level, be16_to_cpu(block->bb_level), seqno, bno);
+				level, be16_to_cpu(block->bb_level), treename,
+				seqno, bno);
 		error++;
 	}
 	if (!isroot) {
@@ -4755,9 +4771,9 @@ scanfunc_rmap(
 		if (be16_to_cpu(block->bb_numrecs) > mp->m_rmap_mxr[0] ||
 		    (isroot == 0 && be16_to_cpu(block->bb_numrecs) < mp->m_rmap_mnr[0])) {
 			dbprintf(_("bad btree nrecs (%u, min=%u, max=%u) in "
-				 "rmapbt block %u/%u\n"),
+				 "%s block %u/%u\n"),
 				be16_to_cpu(block->bb_numrecs), mp->m_rmap_mnr[0],
-				mp->m_rmap_mxr[0], seqno, bno);
+				mp->m_rmap_mxr[0], treename, seqno, bno);
 			serious_error++;
 			return;
 		}
@@ -4778,17 +4794,23 @@ scanfunc_rmap(
 	}
 	if (be16_to_cpu(block->bb_numrecs) > mp->m_rmap_mxr[1] ||
 	    (isroot == 0 && be16_to_cpu(block->bb_numrecs) < mp->m_rmap_mnr[1])) {
-		dbprintf(_("bad btree nrecs (%u, min=%u, max=%u) in rmapbt "
+		dbprintf(_("bad btree nrecs (%u, min=%u, max=%u) in %s "
 			 "block %u/%u\n"),
 			be16_to_cpu(block->bb_numrecs), mp->m_rmap_mnr[1],
-			mp->m_rmap_mxr[1], seqno, bno);
+			mp->m_rmap_mxr[1], treename, seqno, bno);
 		serious_error++;
 		return;
 	}
-	pp = XFS_RMAP_PTR_ADDR(block, 1, mp->m_rmap_mxr[1]);
+	if (xfs_sb_version_hasrmapxbt(&mp->m_sb)) {
+		pp = XFS_RMAPX_PTR_ADDR(block, 1, mp->m_rmap_mxr[1]);
+		btype = TYP_RMAPXBT;
+	} else {
+		pp = XFS_RMAP_PTR_ADDR(block, 1, mp->m_rmap_mxr[1]);
+		btype = TYP_RMAPBT;
+	}
 	for (i = 0; i < be16_to_cpu(block->bb_numrecs); i++)
 		scan_sbtree(agf, be32_to_cpu(pp[i]), level, 0, scanfunc_rmap,
-				TYP_RMAPBT);
+				btype);
 }
 
 static void

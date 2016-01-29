@@ -28,6 +28,10 @@
 #include "output.h"
 #include "malloc.h"
 #include "type.h"
+#include "fprint.h"
+#include "faddr.h"
+#include "field.h"
+#include "agf.h"
 
 static char		**cmdline;
 static int		ncmdline;
@@ -176,6 +180,9 @@ init(
 		type_set_tab_spcrc();
 	else if (xfs_sb_version_hascrc(&mp->m_sb))
 		type_set_tab_crc();
+
+	if (xfs_sb_version_hasrmapxbt(&mp->m_sb))
+		agf_setrmapxbt();
 
 	push_cur();
 	init_commands();

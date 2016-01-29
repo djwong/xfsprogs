@@ -714,8 +714,17 @@ xfs_sb_mount_common(
 	mp->m_bmap_dmnr[0] = mp->m_bmap_dmxr[0] / 2;
 	mp->m_bmap_dmnr[1] = mp->m_bmap_dmxr[1] / 2;
 
-	mp->m_rmap_mxr[0] = xfs_rmapbt_maxrecs(mp, sbp->sb_blocksize, 1);
-	mp->m_rmap_mxr[1] = xfs_rmapbt_maxrecs(mp, sbp->sb_blocksize, 0);
+	if (xfs_sb_version_hasrmapxbt(&mp->m_sb)) {
+		mp->m_rmap_mxr[0] = xfs_rmapxbt_maxrecs(mp, sbp->sb_blocksize,
+				true);
+		mp->m_rmap_mxr[1] = xfs_rmapxbt_maxrecs(mp, sbp->sb_blocksize,
+				false);
+	} else {
+		mp->m_rmap_mxr[0] = xfs_rmapbt_maxrecs(mp, sbp->sb_blocksize,
+				true);
+		mp->m_rmap_mxr[1] = xfs_rmapbt_maxrecs(mp, sbp->sb_blocksize,
+				false);
+	}
 	mp->m_rmap_mnr[0] = mp->m_rmap_mxr[0] / 2;
 	mp->m_rmap_mnr[1] = mp->m_rmap_mxr[1] / 2;
 

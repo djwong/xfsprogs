@@ -176,8 +176,12 @@ const ftattr_t	ftattrtab[] = {
 
 	{ FLDT_RMAPBT_CRC, "rmapbt", NULL, (char *)rmapbt_crc_flds, btblock_size,
 	  FTARG_SIZE, NULL, rmapbt_crc_flds },
+	{ FLDT_RMAPXBT_CRC, "rmapxbt", NULL, (char *)rmapxbt_crc_flds, btblock_size,
+	  FTARG_SIZE, NULL, rmapxbt_crc_flds },
 	{ FLDT_RMAPBTKEY, "rmapbtkey", fp_sarray, (char *)rmapbt_key_flds,
 	  SI(bitsz(struct xfs_rmap_key)), 0, NULL, rmapbt_key_flds },
+	{ FLDT_RMAPXBTKEY, "rmapxbtkey", fp_sarray, (char *)rmapxbt_key_flds,
+	  SI(bitsz(struct xfs_rmapx_key)), 0, NULL, rmapxbt_key_flds },
 	{ FLDT_RMAPBTPTR, "rmapbtptr", fp_num, "%u",
 	  SI(bitsz(xfs_rmap_ptr_t)), 0, fa_agblock, NULL },
 	{ FLDT_RMAPBTREC, "rmapbtrec", fp_sarray, (char *)rmapbt_rec_flds,

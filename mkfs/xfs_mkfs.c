@@ -3037,15 +3037,17 @@ _("size %s specified for log subvolume is too large, maximum is %lld blocks\n"),
 		/* RMAP btree root block */
 		if (rmapbt) {
 			struct xfs_rmap_rec	*rrec;
+			__u32			magic;
 
 			buf = libxfs_getbuf(mp->m_ddev_targp,
 				XFS_AGB_TO_DADDR(mp, agno, XFS_RMAP_BLOCK(mp)),
 				bsize);
+			magic = reflink ? XFS_RMAPX_CRC_MAGIC : XFS_RMAP_CRC_MAGIC;
 			buf->b_ops = &xfs_rmapbt_buf_ops;
 			block = XFS_BUF_TO_BLOCK(buf);
 			memset(block, 0, blocksize);
 
-			xfs_btree_init_block(mp, buf, XFS_RMAP_CRC_MAGIC, 0, 0,
+			xfs_btree_init_block(mp, buf, magic, 0, 0,
 						agno, XFS_BTREE_CRC_BLOCKS);
 
 			/*

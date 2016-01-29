@@ -55,8 +55,11 @@ extern const struct field	cntbt_key_flds[];
 extern const struct field	cntbt_rec_flds[];
 
 extern const struct field	rmapbt_crc_flds[];
+extern const struct field	rmapxbt_crc_flds[];
 extern const struct field	rmapbt_crc_hfld[];
+extern const struct field	rmapxbt_crc_hfld[];
 extern const struct field	rmapbt_key_flds[];
+extern const struct field	rmapxbt_key_flds[];
 extern const struct field	rmapbt_rec_flds[];
 
 extern const struct field	refcbt_crc_flds[];

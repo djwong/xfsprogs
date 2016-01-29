@@ -554,6 +554,12 @@ static inline bool xfs_sb_version_hasreflink(struct xfs_sb *sbp)
 		(sbp->sb_features_ro_compat & XFS_SB_FEAT_RO_COMPAT_REFLINK);
 }
 
+static inline bool xfs_sb_version_hasrmapxbt(struct xfs_sb *sbp)
+{
+	return  xfs_sb_version_hasrmapbt(sbp) &&
+		xfs_sb_version_hasreflink(sbp);
+}
+
 /*
  * end of superblock version macros
  */
@@ -1336,6 +1342,7 @@ typedef __be32 xfs_inobt_ptr_t;
  * There is a btree for the reverse map per allocation group
  */
 #define	XFS_RMAP_CRC_MAGIC	0x524d4233	/* 'RMB3' */
+#define	XFS_RMAPX_CRC_MAGIC	0x34524d42	/* '4RMB' */
 
 /*
  * Ownership info for an extent.  This is used to create reverse-mapping
@@ -1459,6 +1466,14 @@ struct xfs_rmap_irec {
  * We don't use the length for lookups
  */
 struct xfs_rmap_key {
+	__be32		rm_startblock;	/* extent start block */
+};
+
+/*
+ * The extended rmap btree has a larger key because we allow multiple files
+ * to map the same physical block at any logical offset.
+ */
+struct xfs_rmapx_key {
 	__be32		rm_startblock;	/* extent start block */
 	__be64		rm_owner;	/* extent owner */
 	__be64		rm_offset;	/* offset within the owner */

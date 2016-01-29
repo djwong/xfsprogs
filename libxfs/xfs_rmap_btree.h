@@ -41,16 +41,28 @@ struct xfs_rmap_list;
 		((char *)(block) + XFS_RMAP_BLOCK_LEN + \
 		 ((index) - 1) * sizeof(struct xfs_rmap_key)))
 
+#define XFS_RMAPX_KEY_ADDR(block, index) \
+	((struct xfs_rmapx_key *) \
+		((char *)(block) + XFS_RMAP_BLOCK_LEN + \
+		 ((index) - 1) * sizeof(struct xfs_rmapx_key)))
+
 #define XFS_RMAP_PTR_ADDR(block, index, maxrecs) \
 	((xfs_rmap_ptr_t *) \
 		((char *)(block) + XFS_RMAP_BLOCK_LEN + \
 		 (maxrecs) * sizeof(struct xfs_rmap_key) + \
 		 ((index) - 1) * sizeof(xfs_rmap_ptr_t)))
 
+#define XFS_RMAPX_PTR_ADDR(block, index, maxrecs) \
+	((xfs_rmap_ptr_t *) \
+		((char *)(block) + XFS_RMAP_BLOCK_LEN + \
+		 (maxrecs) * sizeof(struct xfs_rmapx_key) + \
+		 ((index) - 1) * sizeof(xfs_rmap_ptr_t)))
+
 struct xfs_btree_cur *xfs_rmapbt_init_cursor(struct xfs_mount *mp,
 				struct xfs_trans *tp, struct xfs_buf *bp,
 				xfs_agnumber_t agno);
 int xfs_rmapbt_maxrecs(struct xfs_mount *mp, int blocklen, int leaf);
+int xfs_rmapxbt_maxrecs(struct xfs_mount *mp, int blocklen, int leaf);
 
 int xfs_rmap_lookup_le(struct xfs_btree_cur *cur, xfs_agblock_t	bno,
 		xfs_extlen_t len, uint64_t owner, uint64_t offset, int *stat);

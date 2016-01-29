@@ -42,7 +42,7 @@ const field_t	agf_hfld[] = {
 
 #define	OFF(f)	bitize(offsetof(xfs_agf_t, agf_ ## f))
 #define	SZ(f)	bitszof(xfs_agf_t, agf_ ## f)
-const field_t	agf_flds[] = {
+field_t	agf_flds[] = {
 	{ "magicnum", FLDT_UINT32X, OI(OFF(magicnum)), C1, 0, TYP_NONE },
 	{ "versionnum", FLDT_UINT32D, OI(OFF(versionnum)), C1, 0, TYP_NONE },
 	{ "seqno", FLDT_AGNUMBER, OI(OFF(seqno)), C1, 0, TYP_NONE },
@@ -127,6 +127,21 @@ agf_f(
 		XFS_AG_DADDR(mp, cur_agno, XFS_AGF_DADDR(mp)),
 		XFS_FSS_TO_BB(mp, 1), DB_RING_ADD, NULL);
 	return 0;
+}
+
+void
+agf_setrmapxbt(void)
+{
+	field_t		*f;
+
+	if (xfs_sb_version_hasrmapxbt(&mp->m_sb))
+
+	for (f = agf_flds; f->name != NULL; f++) {
+		if (f->next == TYP_RMAPBT) {
+			f->next = TYP_RMAPXBT;
+			break;
+		}
+	}
 }
 
 void

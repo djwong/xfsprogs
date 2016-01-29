@@ -102,6 +102,12 @@ struct xfs_db_btree {
 		sizeof(struct xfs_rmap_rec),
 		sizeof(__be32),
 	},
+	{	XFS_RMAPX_CRC_MAGIC,
+		XFS_BTREE_SBLOCK_CRC_LEN,
+		sizeof(struct xfs_rmapx_key),
+		sizeof(struct xfs_rmap_rec),
+		sizeof(__be32),
+	},
 	{	XFS_REFC_CRC_MAGIC,
 		XFS_BTREE_SBLOCK_CRC_LEN,
 		sizeof(struct xfs_refcount_key),
@@ -625,6 +631,10 @@ const field_t	rmapbt_crc_hfld[] = {
 	{ "", FLDT_RMAPBT_CRC, OI(0), C1, 0, TYP_NONE },
 	{ NULL }
 };
+const field_t	rmapxbt_crc_hfld[] = {
+	{ "", FLDT_RMAPXBT_CRC, OI(0), C1, 0, TYP_NONE },
+	{ NULL }
+};
 
 #define	OFF(f)	bitize(offsetof(struct xfs_btree_block, bb_ ## f))
 const field_t	rmapbt_crc_flds[] = {
@@ -646,23 +656,50 @@ const field_t	rmapbt_crc_flds[] = {
 	  FLD_ARRAY|FLD_ABASE1|FLD_COUNT|FLD_OFFSET, TYP_RMAPBT },
 	{ NULL }
 };
+const field_t	rmapxbt_crc_flds[] = {
+	{ "magic", FLDT_UINT32X, OI(OFF(magic)), C1, 0, TYP_NONE },
+	{ "level", FLDT_UINT16D, OI(OFF(level)), C1, 0, TYP_NONE },
+	{ "numrecs", FLDT_UINT16D, OI(OFF(numrecs)), C1, 0, TYP_NONE },
+	{ "leftsib", FLDT_AGBLOCK, OI(OFF(u.s.bb_leftsib)), C1, 0, TYP_RMAPXBT },
+	{ "rightsib", FLDT_AGBLOCK, OI(OFF(u.s.bb_rightsib)), C1, 0, TYP_RMAPXBT },
+	{ "bno", FLDT_DFSBNO, OI(OFF(u.s.bb_blkno)), C1, 0, TYP_RMAPXBT },
+	{ "lsn", FLDT_UINT64X, OI(OFF(u.s.bb_lsn)), C1, 0, TYP_NONE },
+	{ "uuid", FLDT_UUID, OI(OFF(u.s.bb_uuid)), C1, 0, TYP_NONE },
+	{ "owner", FLDT_AGNUMBER, OI(OFF(u.s.bb_owner)), C1, 0, TYP_NONE },
+	{ "crc", FLDT_CRC, OI(OFF(u.s.bb_crc)), C1, 0, TYP_NONE },
+	{ "recs", FLDT_RMAPBTREC, btblock_rec_offset, btblock_rec_count,
+	  FLD_ARRAY|FLD_ABASE1|FLD_COUNT|FLD_OFFSET, TYP_NONE },
+	{ "keys", FLDT_RMAPXBTKEY, btblock_key_offset, btblock_key_count,
+	  FLD_ARRAY|FLD_ABASE1|FLD_COUNT|FLD_OFFSET, TYP_NONE },
+	{ "ptrs", FLDT_RMAPBTPTR, btblock_ptr_offset, btblock_key_count,
+	  FLD_ARRAY|FLD_ABASE1|FLD_COUNT|FLD_OFFSET, TYP_RMAPXBT },
+	{ NULL }
+};
 #undef OFF
 
 #define	KOFF(f)	bitize(offsetof(struct xfs_rmap_key, rm_ ## f))
 
-#define RMAPBK_STARTBLOCK_BITOFF	0
-#define RMAPBK_OWNER_BITOFF		(RMAPBK_STARTBLOCK_BITOFF + RMAPBT_STARTBLOCK_BITLEN)
-#define RMAPBK_ATTRFLAG_BITOFF		(RMAPBK_OWNER_BITOFF + RMAPBT_OWNER_BITLEN)
-#define RMAPBK_BMBTFLAG_BITOFF		(RMAPBK_ATTRFLAG_BITOFF + RMAPBT_ATTRFLAG_BITLEN)
-#define RMAPBK_OFFSET_BITOFF		(RMAPBK_BMBTFLAG_BITOFF + RMAPBT_BMBTFLAG_BITLEN)
-
 const field_t	rmapbt_key_flds[] = {
 	{ "startblock", FLDT_AGBLOCK, OI(KOFF(startblock)), C1, 0, TYP_DATA },
+	{ NULL }
+};
+#undef KOFF
+
+#define	KOFF(f)	bitize(offsetof(struct xfs_rmapx_key, rm_ ## f))
+
+#define RMAPXBK_STARTBLOCK_BITOFF	0
+#define RMAPXBK_OWNER_BITOFF		(RMAPXBK_STARTBLOCK_BITOFF + RMAPBT_STARTBLOCK_BITLEN)
+#define RMAPXBK_ATTRFLAG_BITOFF		(RMAPXBK_OWNER_BITOFF + RMAPBT_OWNER_BITLEN)
+#define RMAPXBK_BMBTFLAG_BITOFF		(RMAPXBK_ATTRFLAG_BITOFF + RMAPBT_ATTRFLAG_BITLEN)
+#define RMAPXBK_OFFSET_BITOFF		(RMAPXBK_BMBTFLAG_BITOFF + RMAPBT_BMBTFLAG_BITLEN)
+
+const field_t	rmapxbt_key_flds[] = {
+	{ "startblock", FLDT_AGBLOCK, OI(KOFF(startblock)), C1, 0, TYP_DATA },
 	{ "owner", FLDT_INT64D, OI(KOFF(owner)), C1, 0, TYP_NONE },
-	{ "offset", FLDT_RFILEOFFD, OI(RMAPBK_OFFSET_BITOFF), C1, 0, TYP_NONE },
-	{ "attrfork", FLDT_RATTRFORKFLG, OI(RMAPBK_ATTRFLAG_BITOFF), C1, 0,
+	{ "offset", FLDT_RFILEOFFD, OI(RMAPXBK_OFFSET_BITOFF), C1, 0, TYP_NONE },
+	{ "attrfork", FLDT_RATTRFORKFLG, OI(RMAPXBK_ATTRFLAG_BITOFF), C1, 0,
 	  TYP_NONE },
-	{ "bmbtblock", FLDT_RBMBTFLG, OI(RMAPBK_BMBTFLAG_BITOFF), C1, 0,
+	{ "bmbtblock", FLDT_RBMBTFLG, OI(RMAPXBK_BMBTFLAG_BITOFF), C1, 0,
 	  TYP_NONE },
 	{ NULL }
 };

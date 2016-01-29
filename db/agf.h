@@ -16,8 +16,10 @@
  * Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-extern const struct field	agf_flds[];
+extern struct field		agf_flds[];
 extern const struct field	agf_hfld[];
 
 extern void	agf_init(void);
 extern int	agf_size(void *obj, int startoff, int idx);
+
+extern void	agf_setrmapxbt(void);

@@ -567,7 +567,10 @@ scanfunc_rmapbt(
 		return 1;
 	}
 
-	pp = XFS_RMAP_PTR_ADDR(block, 1, mp->m_rmap_mxr[1]);
+	if (xfs_sb_version_hasrmapxbt(&mp->m_sb))
+		pp = XFS_RMAPX_PTR_ADDR(block, 1, mp->m_rmap_mxr[1]);
+	else
+		pp = XFS_RMAP_PTR_ADDR(block, 1, mp->m_rmap_mxr[1]);
 	for (i = 0; i < numrecs; i++) {
 		if (!valid_bno(agno, be32_to_cpu(pp[i]))) {
 			if (show_warnings)

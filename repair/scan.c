@@ -818,7 +818,7 @@ scan_rmapbt(
 	void			*priv)
 {
 	struct aghdr_cnts	*agcnts = priv;
-	const char		*name = "rmap";
+	const char		*name;
 	int			i;
 	xfs_rmap_ptr_t		*pp;
 	struct xfs_rmap_rec	*rp;
@@ -829,7 +829,8 @@ scan_rmapbt(
 	int64_t			lastowner = 0;
 	int64_t			lastoffset = 0;
 
-	if (magic != XFS_RMAP_CRC_MAGIC) {
+	name = xfs_sb_version_hasrmapxbt(&mp->m_sb) ? "rmapx" : "rmap";
+	if (magic != XFS_RMAP_CRC_MAGIC && magic != XFS_RMAPX_CRC_MAGIC) {
 		name = "(unknown)";
 		hdr_errors++;
 		suspect++;
@@ -1048,7 +1049,10 @@ _("unknown block (%d,%d-%d) mismatch on %s tree, state - %d,%" PRIx64 "\n"),
 	/*
 	 * interior record
 	 */
-	pp = XFS_RMAP_PTR_ADDR(block, 1, mp->m_rmap_mxr[1]);
+	if (xfs_sb_version_hasrmapxbt(&mp->m_sb))
+		pp = XFS_RMAPX_PTR_ADDR(block, 1, mp->m_rmap_mxr[1]);
+	else
+		pp = XFS_RMAP_PTR_ADDR(block, 1, mp->m_rmap_mxr[1]);
 
 	if (numrecs > mp->m_rmap_mxr[1])  {
 		numrecs = mp->m_rmap_mxr[1];
@@ -2028,11 +2032,15 @@ validate_agf(
 	}
 
 	if (xfs_sb_version_hasrmapbt(&mp->m_sb)) {
+		__uint32_t	magic;
+
+		magic = xfs_sb_version_hasrmapxbt(&mp->m_sb) ?
+				XFS_RMAPX_CRC_MAGIC : XFS_RMAP_CRC_MAGIC;
 		bno = be32_to_cpu(agf->agf_roots[XFS_BTNUM_RMAP]);
 		if (bno != 0 && verify_agbno(mp, agno, bno)) {
 			scan_sbtree(bno,
 				    be32_to_cpu(agf->agf_levels[XFS_BTNUM_RMAP]),
-				    agno, 0, scan_rmapbt, 1, XFS_RMAP_CRC_MAGIC,
+				    agno, 0, scan_rmapbt, 1, magic,
 				    agcnts, &xfs_rmapbt_buf_ops);
 		} else  {
 			do_warn(_("bad agbno %u for rmapbt root, agno %d\n"),
