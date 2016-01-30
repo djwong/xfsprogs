@@ -554,7 +554,7 @@ xfs_sb_verify(
 	struct xfs_sb	sb;
 
 	/*
-	 * Use call variant which doesn't convert quota flags from disk
+	 * Use call variant which doesn't convert quota flags from disk 
 	 * format, because xfs_mount_validate_sb checks the on-disk flags.
 	 */
 	__xfs_sb_from_disk(&sb, XFS_BUF_TO_SBP(bp), false);

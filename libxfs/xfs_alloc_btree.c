@@ -291,8 +291,6 @@ xfs_allocbt_verify(
 	level = be16_to_cpu(block->bb_level);
 	switch (block->bb_magic) {
 	case cpu_to_be32(XFS_ABTB_CRC_MAGIC):
-		if (!xfs_sb_version_hascrc(&mp->m_sb))
-			return false;
 		if (!xfs_btree_sblock_v5hdr_verify(bp))
 			return false;
 		/* fall through */
@@ -304,8 +302,6 @@ xfs_allocbt_verify(
 			return false;
 		break;
 	case cpu_to_be32(XFS_ABTC_CRC_MAGIC):
-		if (!xfs_sb_version_hascrc(&mp->m_sb))
-			return false;
 		if (!xfs_btree_sblock_v5hdr_verify(bp))
 			return false;
 		/* fall through */
