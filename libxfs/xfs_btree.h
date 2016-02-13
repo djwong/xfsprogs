@@ -143,6 +143,9 @@ struct xfs_btree_ops {
 	size_t	key_len;
 	size_t	rec_len;
 
+	/* flags */
+	uint	flags;
+
 	/* cursor operations */
 	struct xfs_btree_cur *(*dup_cursor)(struct xfs_btree_cur *);
 	void	(*update_cursor)(struct xfs_btree_cur *src,
@@ -179,10 +182,19 @@ struct xfs_btree_ops {
 				     union xfs_btree_rec *rec);
 	void	(*init_ptr_from_cur)(struct xfs_btree_cur *cur,
 				     union xfs_btree_ptr *ptr);
+	void	(*init_high_key_from_rec)(union xfs_btree_key *key,
+					  union xfs_btree_rec *rec);
 
 	/* difference between key value and cursor value */
 	__int64_t (*key_diff)(struct xfs_btree_cur *cur,
 			      union xfs_btree_key *key);
+
+	/*
+	 * Difference between key2 and key1 -- positive if key2 > key1,
+	 * negative if key2 < key1, and zero if equal.
+	 */
+	__int64_t (*diff_two_keys)(union xfs_btree_key *key1,
+				   union xfs_btree_key *key2);
 
 	const struct xfs_buf_ops	*buf_ops;
 
@@ -198,6 +210,9 @@ struct xfs_btree_ops {
 				union xfs_btree_rec *r2);
 #endif
 };
+
+/* btree ops flags */
+#define XFS_BTREE_OPS_OVERLAPPING	(1<<0)	/* overlapping intervals */
 
 /*
  * Reasons for the update_lastrec method to be called.
