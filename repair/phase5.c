@@ -1523,6 +1523,83 @@ prop_rmap_cursor(xfs_mount_t *mp, xfs_agnumber_t agno, bt_status_t *btree_curs,
 	*bt_ptr = cpu_to_be32(btree_curs->level[level-1].agbno);
 }
 
+__int64_t
+rmapx_diffkeys(
+	struct xfs_rmap_irec	*kp1,
+	struct xfs_rmap_irec	*kp2)
+{
+	__int64_t		d;
+
+	d = (__int64_t)kp2->rm_startblock - kp1->rm_startblock;
+	if (d)
+		return d;
+
+	if (kp2->rm_owner > kp1->rm_owner)
+		return 1;
+	else if (kp1->rm_owner > kp2->rm_owner)
+		return -1;
+
+	if (kp2->rm_offset > kp1->rm_offset)
+		return 1;
+	else if (kp1->rm_offset > kp2->rm_offset)
+		return -1;
+	return 0;
+}
+
+static void
+prop_rmapx_highkey(xfs_mount_t *mp, xfs_agnumber_t agno, bt_status_t *btree_curs,
+	struct xfs_rmap_irec *rm_highkey)
+{
+	struct xfs_btree_block	*bt_hdr;
+	struct xfs_rmapx_key	*bt_keyx;
+	bt_stat_level_t		*lptr;
+	struct xfs_rmap_irec	key;
+	struct xfs_rmap_irec	high_key;
+	int			level;
+	int			i;
+	int			numrecs;
+
+	high_key = *rm_highkey;
+	for (level = 1; level < btree_curs->num_levels; level++) {
+		lptr = &btree_curs->level[level];
+		bt_hdr = XFS_BUF_TO_BLOCK(lptr->buf_p);
+		numrecs = be16_to_cpu(bt_hdr->bb_numrecs);
+		bt_keyx = XFS_RMAPX_HIGH_KEY_ADDR(bt_hdr, numrecs);
+
+		bt_keyx->rm_startblock = cpu_to_be32(high_key.rm_startblock);
+		bt_keyx->rm_owner = cpu_to_be64(high_key.rm_owner);
+		bt_keyx->rm_offset = cpu_to_be64(
+				xfs_rmap_irec_offset_pack(&high_key));
+
+		for (i = 1; i < numrecs - 1; i++) {
+			bt_keyx = XFS_RMAPX_HIGH_KEY_ADDR(bt_hdr, i);
+			key.rm_startblock = be32_to_cpu(bt_keyx->rm_startblock);
+			key.rm_owner = be64_to_cpu(bt_keyx->rm_owner);
+			key.rm_offset = be64_to_cpu(bt_keyx->rm_offset);
+			if (rmapx_diffkeys(&high_key, &key) > 0)
+				high_key = key;
+		}
+	}
+}
+
+static void
+rmapx_high_key_from_rec(
+	struct xfs_rmap_irec	*rec,
+	struct xfs_rmap_irec	*key)
+{
+	int			adj;
+
+	adj = XFS_RMAP_LEN(rec->rm_blockcount) - 1;
+
+	key->rm_startblock = rec->rm_startblock + adj;
+	key->rm_owner = rec->rm_owner;
+	key->rm_offset = rec->rm_offset;
+	if (XFS_RMAP_NON_INODE_OWNER(rec->rm_owner) ||
+	    (rec->rm_flags & XFS_RMAP_BMBT))
+		return;
+	key->rm_offset += adj;
+}
+
 /*
  * rebuilds a rmap btree given a cursor.
  */
@@ -1536,13 +1613,16 @@ build_rmap_tree(xfs_mount_t *mp, xfs_agnumber_t agno, bt_status_t *btree_curs)
 	struct xfs_rmap_irec	*rm_rec;
 	struct xfs_slab_cursor	*rmap_cur;
 	struct xfs_rmap_rec	*bt_rec;
+	struct xfs_rmap_irec	highest_key;
+	struct xfs_rmap_irec	hi_key;
 	struct bt_stat_level	*lptr;
 	int			level = btree_curs->num_levels;
 	__u32			magic;
+	bool			has_rmapxbt;
 	int			error;
 
-	magic = xfs_sb_version_hasrmapxbt(&mp->m_sb) ?
-			XFS_RMAPX_CRC_MAGIC : XFS_RMAP_CRC_MAGIC;
+	has_rmapxbt = xfs_sb_version_hasrmapxbt(&mp->m_sb);
+	magic = has_rmapxbt ? XFS_RMAPX_CRC_MAGIC : XFS_RMAP_CRC_MAGIC;
 
 	for (i = 0; i < level; i++)  {
 		lptr = &btree_curs->level[i];
@@ -1606,6 +1686,9 @@ _("Insufficient memory to construct reverse-map cursor."));
 
 		bt_rec = (struct xfs_rmap_rec *)
 			  ((char *)bt_hdr + XFS_RMAP_BLOCK_LEN);
+		highest_key.rm_startblock = 0;
+		highest_key.rm_owner = 0;
+		highest_key.rm_offset = 0;
 		for (j = 0; j < be16_to_cpu(bt_hdr->bb_numrecs); j++) {
 			ASSERT(rm_rec != NULL);
 			bt_rec[j].rm_startblock =
@@ -1615,9 +1698,18 @@ _("Insufficient memory to construct reverse-map cursor."));
 			bt_rec[j].rm_owner = cpu_to_be64(rm_rec->rm_owner);
 			bt_rec[j].rm_offset = cpu_to_be64(
 					xfs_rmap_irec_offset_pack(rm_rec));
+			if (has_rmapxbt) {
+				rmapx_high_key_from_rec(rm_rec, &hi_key);
+				if (rmapx_diffkeys(&highest_key, &hi_key) > 0)
+					highest_key = hi_key;
+			}
 
 			rm_rec = pop_slab_cursor(rmap_cur);
 		}
+
+		/* Now go set the parent key */
+		if (has_rmapxbt)
+			prop_rmapx_highkey(mp, agno, btree_curs, &highest_key);
 
 		if (rm_rec != NULL)  {
 			/*

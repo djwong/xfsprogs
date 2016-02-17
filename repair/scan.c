@@ -806,6 +806,12 @@ rmap_in_order(
 	return offset > lastoffset;
 }
 
+struct rmapx_priv {
+	bool			has_rmapx;
+	struct aghdr_cnts	*agcnts;
+	struct xfs_rmap_irec	high_key;
+};
+
 static void
 scan_rmapbt(
 	struct xfs_btree_block	*block,
@@ -817,7 +823,8 @@ scan_rmapbt(
 	__uint32_t		magic,
 	void			*priv)
 {
-	struct aghdr_cnts	*agcnts = priv;
+	struct rmapx_priv	*rmap_priv = priv;
+	struct aghdr_cnts	*agcnts = rmap_priv->agcnts;
 	const char		*name;
 	int			i;
 	xfs_rmap_ptr_t		*pp;
@@ -828,8 +835,11 @@ scan_rmapbt(
 	xfs_agblock_t		lastblock = 0;
 	int64_t			lastowner = 0;
 	int64_t			lastoffset = 0;
+	struct xfs_rmapx_key	*kp;
+	struct xfs_rmap_irec	key;
 
-	name = xfs_sb_version_hasrmapxbt(&mp->m_sb) ? "rmapx" : "rmap";
+
+	name = rmap_priv->has_rmapx ? "rmapx" : "rmap";
 	if (magic != XFS_RMAP_CRC_MAGIC && magic != XFS_RMAPX_CRC_MAGIC) {
 		name = "(unknown)";
 		hdr_errors++;
@@ -905,6 +915,17 @@ _("%s rmap btree block claimed (state %d), agno %d, bno %d, suspect %d\n"),
 			owner = be64_to_cpu(rp[i].rm_owner);
 			offset = be64_to_cpu(rp[i].rm_offset);
 			end = b + len;
+
+			if (rmap_priv->has_rmapx) {
+				key.rm_startblock = b;
+				key.rm_owner = owner;
+				key.rm_offset = offset;
+				if (rmapx_diffkeys(&rmap_priv->high_key, &key) > 0) {
+					do_warn(
+	_("record %d greater than high key of block (%u/%u) in %s tree\n"),
+						i, agno, bno, name);
+				}
+			}
 
 			if (!verify_agbno(mp, agno, b)) {
 				do_warn(
@@ -1049,7 +1070,7 @@ _("unknown block (%d,%d-%d) mismatch on %s tree, state - %d,%" PRIx64 "\n"),
 	/*
 	 * interior record
 	 */
-	if (xfs_sb_version_hasrmapxbt(&mp->m_sb))
+	if (rmap_priv->has_rmapx)
 		pp = XFS_RMAPX_PTR_ADDR(block, 1, mp->m_rmap_mxr[1]);
 	else
 		pp = XFS_RMAP_PTR_ADDR(block, 1, mp->m_rmap_mxr[1]);
@@ -1080,6 +1101,18 @@ _("unknown block (%d,%d-%d) mismatch on %s tree, state - %d,%" PRIx64 "\n"),
 		suspect = 0;
 	}
 
+	/* check the node's high keys */
+	for (i = 0; !isroot && rmap_priv->has_rmapx && i < numrecs; i++) {
+		kp = XFS_RMAPX_HIGH_KEY_ADDR(block, i + 1);
+		key.rm_startblock = be32_to_cpu(kp->rm_startblock);
+		key.rm_owner = be64_to_cpu(kp->rm_owner);
+		key.rm_offset = be64_to_cpu(kp->rm_offset);
+		if (rmapx_diffkeys(&rmap_priv->high_key, &key) > 0)
+			do_warn(
+	_("key %d greater than high key of block (%u/%u) in %s tree\n"),
+				i, agno, bno, name);
+	}
+
 	for (i = 0; i < numrecs; i++)  {
 		xfs_agblock_t		bno = be32_to_cpu(pp[i]);
 
@@ -1092,6 +1125,16 @@ _("unknown block (%d,%d-%d) mismatch on %s tree, state - %d,%" PRIx64 "\n"),
 		 * pointer mismatch, try and extract as much data
 		 * as possible.
 		 */
+		if (rmap_priv->has_rmapx) {
+			kp = XFS_RMAPX_HIGH_KEY_ADDR(block, i + 1);
+			rmap_priv->high_key.rm_startblock =
+					be32_to_cpu(kp->rm_startblock);
+			rmap_priv->high_key.rm_owner =
+					be64_to_cpu(kp->rm_owner);
+			rmap_priv->high_key.rm_offset =
+					be64_to_cpu(kp->rm_offset);
+		}
+
 		if (bno != 0 && verify_agbno(mp, agno, bno)) {
 			scan_sbtree(bno, level, agno, suspect, scan_rmapbt, 0,
 				    magic, priv, &xfs_rmapbt_buf_ops);
@@ -2032,8 +2075,12 @@ validate_agf(
 	}
 
 	if (xfs_sb_version_hasrmapbt(&mp->m_sb)) {
+		struct rmapx_priv	priv;
 		__uint32_t	magic;
 
+		memset(&priv.high_key, 0xFF, sizeof(priv.high_key));
+		priv.agcnts = agcnts;
+		priv.has_rmapx = xfs_sb_version_hasrmapxbt(&mp->m_sb);
 		magic = xfs_sb_version_hasrmapxbt(&mp->m_sb) ?
 				XFS_RMAPX_CRC_MAGIC : XFS_RMAP_CRC_MAGIC;
 		bno = be32_to_cpu(agf->agf_roots[XFS_BTNUM_RMAP]);
@@ -2041,7 +2088,7 @@ validate_agf(
 			scan_sbtree(bno,
 				    be32_to_cpu(agf->agf_levels[XFS_BTNUM_RMAP]),
 				    agno, 0, scan_rmapbt, 1, magic,
-				    agcnts, &xfs_rmapbt_buf_ops);
+				    &priv, &xfs_rmapbt_buf_ops);
 		} else  {
 			do_warn(_("bad agbno %u for rmapbt root, agno %d\n"),
 				bno, agno);

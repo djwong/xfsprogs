@@ -70,4 +70,9 @@ scan_ags(
 	struct xfs_mount	*mp,
 	int			scan_threads);
 
+__int64_t
+rmapx_diffkeys(
+	struct xfs_rmap_irec	*kp1,
+	struct xfs_rmap_irec	*kp2);
+
 #endif /* _XR_SCAN_H */
