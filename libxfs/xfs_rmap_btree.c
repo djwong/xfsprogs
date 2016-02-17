@@ -196,24 +196,6 @@ xfs_rmapxbt_init_key_from_rec(
 }
 
 STATIC void
-xfs_rmapbt_init_rec_from_key(
-	union xfs_btree_key	*key,
-	union xfs_btree_rec	*rec)
-{
-	rec->rmap.rm_startblock = key->rmap.rm_startblock;
-}
-
-STATIC void
-xfs_rmapxbt_init_rec_from_key(
-	union xfs_btree_key	*key,
-	union xfs_btree_rec	*rec)
-{
-	rec->rmap.rm_startblock = key->rmapx.rm_startblock;
-	rec->rmap.rm_owner = key->rmapx.rm_owner;
-	rec->rmap.rm_offset = key->rmapx.rm_offset;
-}
-
-STATIC void
 xfs_rmapbt_init_rec_from_cur(
 	struct xfs_btree_cur	*cur,
 	union xfs_btree_rec	*rec)
@@ -407,7 +389,6 @@ static const struct xfs_btree_ops xfs_rmapbt_ops = {
 	.get_minrecs		= xfs_rmapbt_get_minrecs,
 	.get_maxrecs		= xfs_rmapbt_get_maxrecs,
 	.init_key_from_rec	= xfs_rmapbt_init_key_from_rec,
-	.init_rec_from_key	= xfs_rmapbt_init_rec_from_key,
 	.init_rec_from_cur	= xfs_rmapbt_init_rec_from_cur,
 	.init_ptr_from_cur	= xfs_rmapbt_init_ptr_from_cur,
 	.key_diff		= xfs_rmapbt_key_diff,
@@ -429,7 +410,6 @@ static const struct xfs_btree_ops xfs_rmapxbt_ops = {
 	.get_minrecs		= xfs_rmapbt_get_minrecs,
 	.get_maxrecs		= xfs_rmapbt_get_maxrecs,
 	.init_key_from_rec	= xfs_rmapxbt_init_key_from_rec,
-	.init_rec_from_key	= xfs_rmapxbt_init_rec_from_key,
 	.init_rec_from_cur	= xfs_rmapbt_init_rec_from_cur,
 	.init_ptr_from_cur	= xfs_rmapbt_init_ptr_from_cur,
 	.key_diff		= xfs_rmapxbt_key_diff,

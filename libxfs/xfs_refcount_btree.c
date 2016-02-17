@@ -165,16 +165,6 @@ xfs_refcountbt_init_key_from_rec(
 }
 
 STATIC void
-xfs_refcountbt_init_rec_from_key(
-	union xfs_btree_key	*key,
-	union xfs_btree_rec	*rec)
-{
-	ASSERT(key->refc.rc_startblock != 0);
-
-	rec->refc.rc_startblock = key->refc.rc_startblock;
-}
-
-STATIC void
 xfs_refcountbt_init_rec_from_cur(
 	struct xfs_btree_cur	*cur,
 	union xfs_btree_rec	*rec)
@@ -320,7 +310,6 @@ static const struct xfs_btree_ops xfs_refcountbt_ops = {
 	.get_minrecs		= xfs_refcountbt_get_minrecs,
 	.get_maxrecs		= xfs_refcountbt_get_maxrecs,
 	.init_key_from_rec	= xfs_refcountbt_init_key_from_rec,
-	.init_rec_from_key	= xfs_refcountbt_init_rec_from_key,
 	.init_rec_from_cur	= xfs_refcountbt_init_rec_from_cur,
 	.init_ptr_from_cur	= xfs_refcountbt_init_ptr_from_cur,
 	.key_diff		= xfs_refcountbt_key_diff,
