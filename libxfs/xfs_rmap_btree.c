@@ -196,6 +196,28 @@ xfs_rmapxbt_init_key_from_rec(
 }
 
 STATIC void
+xfs_rmapxbt_init_high_key_from_rec(
+	union xfs_btree_key	*key,
+	union xfs_btree_rec	*rec)
+{
+	__uint64_t		off;
+	int			adj;
+
+	adj = XFS_RMAP_LEN(be32_to_cpu(rec->rmap.rm_blockcount)) - 1;
+
+	key->rmapx.rm_startblock = rec->rmap.rm_startblock;
+	be32_add_cpu(&key->rmapx.rm_startblock, adj);
+	key->rmapx.rm_owner = rec->rmap.rm_owner;
+	key->rmapx.rm_offset = rec->rmap.rm_offset;
+	if (XFS_RMAP_NON_INODE_OWNER(be64_to_cpu(rec->rmap.rm_owner)) ||
+	    XFS_RMAP_IS_BMBT(be64_to_cpu(rec->rmap.rm_offset)))
+		return;
+	off = be64_to_cpu(key->rmapx.rm_offset);
+	off = (XFS_RMAP_OFF(off) + adj) | (off & XFS_RMAP_OFF_MASK);
+	key->rmapx.rm_offset = cpu_to_be64(off);
+}
+
+STATIC void
 xfs_rmapbt_init_rec_from_cur(
 	struct xfs_btree_cur	*cur,
 	union xfs_btree_rec	*rec)
@@ -247,6 +269,37 @@ xfs_rmapxbt_key_diff(
 		return d;
 	d = (__int64_t)be64_to_cpu(kp->rm_offset) - rec->rm_offset;
 	return d;
+}
+
+STATIC __int64_t
+xfs_rmapxbt_diff_two_keys(
+	union xfs_btree_key	*k1,
+	union xfs_btree_key	*k2)
+{
+	struct xfs_rmapx_key	*kp1 = &k1->rmapx;
+	struct xfs_rmapx_key	*kp2 = &k2->rmapx;
+	__int64_t		d;
+	__u64			x, y;
+
+	d = (__int64_t)be32_to_cpu(kp2->rm_startblock) -
+		       be32_to_cpu(kp1->rm_startblock);
+	if (d)
+		return d;
+
+	x = be64_to_cpu(kp2->rm_owner);
+	y = be64_to_cpu(kp1->rm_owner);
+	if (x > y)
+		return 1;
+	else if (y > x)
+		return -1;
+
+	x = be64_to_cpu(kp2->rm_offset);
+	y = be64_to_cpu(kp1->rm_offset);
+	if (x > y)
+		return 1;
+	else if (y > x)
+		return -1;
+	return 0;
 }
 
 static bool
@@ -402,6 +455,7 @@ static const struct xfs_btree_ops xfs_rmapbt_ops = {
 static const struct xfs_btree_ops xfs_rmapxbt_ops = {
 	.rec_len		= sizeof(struct xfs_rmap_rec),
 	.key_len		= sizeof(struct xfs_rmapx_key),
+	.flags			= XFS_BTREE_OPS_OVERLAPPING,
 
 	.dup_cursor		= xfs_rmapbt_dup_cursor,
 	.set_root		= xfs_rmapbt_set_root,
@@ -410,10 +464,12 @@ static const struct xfs_btree_ops xfs_rmapxbt_ops = {
 	.get_minrecs		= xfs_rmapbt_get_minrecs,
 	.get_maxrecs		= xfs_rmapbt_get_maxrecs,
 	.init_key_from_rec	= xfs_rmapxbt_init_key_from_rec,
+	.init_high_key_from_rec	= xfs_rmapxbt_init_high_key_from_rec,
 	.init_rec_from_cur	= xfs_rmapbt_init_rec_from_cur,
 	.init_ptr_from_cur	= xfs_rmapbt_init_ptr_from_cur,
 	.key_diff		= xfs_rmapxbt_key_diff,
 	.buf_ops		= &xfs_rmapbt_buf_ops,
+	.diff_two_keys		= xfs_rmapxbt_diff_two_keys,
 #if defined(DEBUG) || defined(XFS_WARN)
 	.keys_inorder		= xfs_rmapxbt_keys_inorder,
 	.recs_inorder		= xfs_rmapbt_recs_inorder,
@@ -485,7 +541,7 @@ xfs_rmapxbt_maxrecs(
 	if (leaf)
 		return blocklen / sizeof(struct xfs_rmap_rec);
 	return blocklen /
-		(sizeof(struct xfs_rmapx_key) + sizeof(xfs_rmap_ptr_t));
+		(2 * sizeof(struct xfs_rmapx_key) + sizeof(xfs_rmap_ptr_t));
 }
 
 /* Calculate the refcount btree size for some records. */

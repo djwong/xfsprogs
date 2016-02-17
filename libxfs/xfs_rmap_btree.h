@@ -44,7 +44,13 @@ struct xfs_rmap_list;
 #define XFS_RMAPX_KEY_ADDR(block, index) \
 	((struct xfs_rmapx_key *) \
 		((char *)(block) + XFS_RMAP_BLOCK_LEN + \
-		 ((index) - 1) * sizeof(struct xfs_rmapx_key)))
+		 ((index) - 1) * 2 * sizeof(struct xfs_rmapx_key)))
+
+#define XFS_RMAPX_HIGH_KEY_ADDR(block, index) \
+	((struct xfs_rmapx_key *) \
+		((char *)(block) + XFS_RMAP_BLOCK_LEN + \
+		 sizeof(struct xfs_rmapx_key) + \
+		 ((index) - 1) * 2 * sizeof(struct xfs_rmapx_key)))
 
 #define XFS_RMAP_PTR_ADDR(block, index, maxrecs) \
 	((xfs_rmap_ptr_t *) \
@@ -55,7 +61,7 @@ struct xfs_rmap_list;
 #define XFS_RMAPX_PTR_ADDR(block, index, maxrecs) \
 	((xfs_rmap_ptr_t *) \
 		((char *)(block) + XFS_RMAP_BLOCK_LEN + \
-		 (maxrecs) * sizeof(struct xfs_rmapx_key) + \
+		 (maxrecs) * 2 * sizeof(struct xfs_rmapx_key) + \
 		 ((index) - 1) * sizeof(xfs_rmap_ptr_t)))
 
 struct xfs_btree_cur *xfs_rmapbt_init_cursor(struct xfs_mount *mp,
