@@ -1244,7 +1244,30 @@ _("%s btree block claimed (state %d), agno %d, bno %d, suspect %d\n"),
 				continue;
 			}
 
-			if (nr < 2 || nr > MAXREFCOUNT) {
+			if (nr == 1) {
+				xfs_agblock_t	c;
+				xfs_extlen_t	cnr;
+
+				for (c = b; c < end; c += cnr) {
+					state = get_bmap_ext(agno, c, end, &cnr);
+					switch (state) {
+					case XR_E_COW:
+						break;
+					case XR_E_UNKNOWN:
+						do_warn(
+_("leftover CoW extent (%u/%u) len %u\n"),
+						agno, c, cnr);
+						set_bmap_ext(agno, c, cnr, XR_E_FREE);
+						break;
+					default:
+						do_warn(
+_("extent (%u/%u) len %u claimed, state is %d\n"),
+						agno, c, cnr, state);
+						set_bmap_ext(agno, c, cnr, XR_E_FREE);
+						break;
+					}
+				}
+			} else if (nr < 2 || nr > MAXREFCOUNT) {
 				do_warn(
 	_("invalid reference count %u in record %u of %s btree block %u/%u\n"),
 					nr, i, name, agno, bno);
