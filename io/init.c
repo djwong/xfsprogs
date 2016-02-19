@@ -60,6 +60,7 @@ init_commands(void)
 	file_init();
 	flink_init();
 	freeze_init();
+	fsmap_init();
 	fsync_init();
 	getrusage_init();
 	help_init();

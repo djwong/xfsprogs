@@ -267,6 +267,53 @@ ioctl.  Options behave as described in the
 .BR xfs_bmap (8)
 manual page.
 .TP
+.BI "fsmap [ \-v ] [ \-n " nx " ] [ " start " ] [ " end " ]
+Prints the mapping of disk blocks used by an XFS filesystem.  The map
+lists each extent used by files, allocation group metadata,
+journalling logs, and static filesystem metadata, as well as any
+regions that are unused.  Each line of the listings takes the
+following form:
+.PP
+.RS
+.IR extent ": [" startblock .. endblock "]: " owner " " startoffset .. endoffset " " length
+.PP
+Static filesystem metadata, allocation group metadata, btrees,
+journalling logs, and free space are marked by replacing the
+.IR startoffset .. endoffset
+with the appropriate marker.  All blocks, offsets, and lengths are specified
+in units of 512-byte blocks, no matter what the filesystem's block size is.
+.BI "The optional " start " and " end " arguments can be used to constrain
+the output to a particular range of disk blocks.
+.RE
+.RS 1.0i
+.PD 0
+.TP
+.BI \-n " num_extents"
+If this option is given,
+.B xfs_fsmap
+obtains the extent list of the file in groups of
+.I num_extents
+extents. In the absence of
+.BR \-n ", " xfs_fsmap
+queries the system for the number of extents in the filesystem and uses that
+value to compute the group size.
+.TP
+.B \-v
+Shows verbose information. When this flag is specified, additional AG
+specific information is appended to each line in the following form:
+.IP
+.RS 1.2i
+.IR agno " (" startagblock .. endagblock ") " nblocks " " flags
+.RE
+.IP
+A second
+.B \-v
+option will print out the
+.I flags
+legend.
+.RE
+.PD
+.TP
 .BI "extsize [ \-R | \-D ] [ " value " ]"
 Display and/or modify the preferred extent size used when allocating
 space for the currently open file. If the
