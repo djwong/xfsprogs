@@ -164,4 +164,17 @@ extern xfs_extlen_t xfs_rmapbt_max_size(struct xfs_mount *mp);
 extern int xfs_rmapbt_alloc_reserve_pool(struct xfs_mount *mp);
 extern int xfs_rmapbt_free_reserve_pool(struct xfs_mount *mp);
 
+typedef int (*xfs_rmapbt_query_range_fn)(
+	struct xfs_btree_cur	*cur,
+	struct xfs_rmap_irec	*rec,
+	void			*priv);
+
+int
+xfs_rmapbt_query_range(
+	struct xfs_btree_cur		*cur,
+	struct xfs_rmap_irec		*low_rec,
+	struct xfs_rmap_irec		*high_rec,
+	xfs_rmapbt_query_range_fn	fn,
+	void				*priv);
+
 #endif	/* __XFS_RMAP_BTREE_H__ */

@@ -164,6 +164,19 @@ done:
 	return error;
 }
 
+static void
+xfs_rmapbt_btrec_to_irec(
+	union xfs_btree_rec	*rec,
+	struct xfs_rmap_irec	*irec)
+{
+	irec->rm_flags = 0;
+	irec->rm_startblock = be32_to_cpu(rec->rmap.rm_startblock);
+	xfs_rmap_irec_blockcount_unpack(be32_to_cpu(rec->rmap.rm_blockcount),
+			irec);
+	irec->rm_owner = be64_to_cpu(rec->rmap.rm_owner);
+	xfs_rmap_irec_offset_unpack(be64_to_cpu(rec->rmap.rm_offset), irec);
+}
+
 /*
  * Get the data from the pointed-to record.
  */
@@ -180,12 +193,7 @@ xfs_rmap_get_rec(
 	if (error || !*stat)
 		return error;
 
-	irec->rm_flags = 0;
-	irec->rm_startblock = be32_to_cpu(rec->rmap.rm_startblock);
-	xfs_rmap_irec_blockcount_unpack(be32_to_cpu(rec->rmap.rm_blockcount),
-			irec);
-	irec->rm_owner = be64_to_cpu(rec->rmap.rm_owner);
-	xfs_rmap_irec_offset_unpack(be64_to_cpu(rec->rmap.rm_offset), irec);
+	xfs_rmapbt_btrec_to_irec(rec, irec);
 	return 0;
 }
 
@@ -1344,4 +1352,43 @@ advloop:
 	}
 
 	return error;
+}
+
+struct xfs_rmapbt_query_range_info {
+	xfs_rmapbt_query_range_fn	fn;
+	void				*priv;
+};
+
+STATIC int
+xfs_rmapbt_query_range_helper(
+	struct xfs_btree_cur	*cur,
+	union xfs_btree_rec	*rec,
+	void			*priv)
+{
+	struct xfs_rmapbt_query_range_info	*query = priv;
+	struct xfs_rmap_irec			irec;
+
+	xfs_rmapbt_btrec_to_irec(rec, &irec);
+	return query->fn(cur, &irec, query->priv);
+}
+
+/* Find all rmaps between two keys. */
+int
+xfs_rmapbt_query_range(
+	struct xfs_btree_cur		*cur,
+	struct xfs_rmap_irec		*low_rec,
+	struct xfs_rmap_irec		*high_rec,
+	xfs_rmapbt_query_range_fn	fn,
+	void				*priv)
+{
+	union xfs_btree_irec		low_brec;
+	union xfs_btree_irec		high_brec;
+	struct xfs_rmapbt_query_range_info	query;
+
+	low_brec.r = *low_rec;
+	high_brec.r = *high_rec;
+	query.priv = priv;
+	query.fn = fn;
+	return xfs_btree_query_range(cur, &low_brec, &high_brec,
+			xfs_rmapbt_query_range_helper, &query);
 }

@@ -196,6 +196,19 @@ xfs_rmapxbt_init_key_from_rec(
 }
 
 STATIC void
+xfs_rmapbt_init_high_key_from_rec(
+	union xfs_btree_key	*key,
+	union xfs_btree_rec	*rec)
+{
+	int			adj;
+
+	adj = XFS_RMAP_LEN(be32_to_cpu(rec->rmap.rm_blockcount)) - 1;
+
+	key->rmap.rm_startblock = rec->rmap.rm_startblock;
+	be32_add_cpu(&key->rmap.rm_startblock, adj);
+}
+
+STATIC void
 xfs_rmapxbt_init_high_key_from_rec(
 	union xfs_btree_key	*key,
 	union xfs_btree_rec	*rec)
@@ -455,6 +468,7 @@ static const struct xfs_btree_ops xfs_rmapbt_ops = {
 	.get_minrecs		= xfs_rmapbt_get_minrecs,
 	.get_maxrecs		= xfs_rmapbt_get_maxrecs,
 	.init_key_from_rec	= xfs_rmapbt_init_key_from_rec,
+	.init_high_key_from_rec	= xfs_rmapbt_init_high_key_from_rec,
 	.init_rec_from_cur	= xfs_rmapbt_init_rec_from_cur,
 	.init_ptr_from_cur	= xfs_rmapbt_init_ptr_from_cur,
 	.key_diff		= xfs_rmapbt_key_diff,
