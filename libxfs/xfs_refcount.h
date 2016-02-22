@@ -38,6 +38,10 @@ extern int xfs_refcount_put_extent(struct xfs_mount *mp, struct xfs_trans *tp,
 		struct xfs_bmap_free *flist, xfs_fsblock_t fsbno,
 		xfs_filblks_t len, struct xfs_owner_info *oinfo);
 
+extern int __xfs_refcount_find_shared(struct xfs_mount *mp,
+		struct xfs_buf *agbp, xfs_agnumber_t agno, xfs_agblock_t agbno,
+		xfs_extlen_t aglen, xfs_agblock_t *fbno, xfs_extlen_t *flen,
+		bool find_maximal);
 extern int xfs_refcount_find_shared(struct xfs_mount *mp, xfs_agnumber_t agno,
 		xfs_agblock_t agbno, xfs_extlen_t aglen, xfs_agblock_t *fbno,
 		xfs_extlen_t *flen, bool find_maximal);
