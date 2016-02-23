@@ -231,6 +231,8 @@
 #define trace_xfs_ag_resv_free(a...)			((void)0)
 #define trace_xfs_ag_resv_alloc_block(a...)		((void)0)
 #define trace_xfs_ag_resv_free_block(a...)		((void)0)
+#define trace_xfs_ag_resv_agfl_needed(a...)		((void)0)
+#define trace_xfs_ag_resv_nores_needed(a...)		((void)0)
 #define trace_xfs_ag_resv_needed(a...)			((void)0)
 #define trace_xfs_ag_resv_free_error(a...)		((void)0)
 #define trace_xfs_ag_resv_init_error(a...)		((void)0)

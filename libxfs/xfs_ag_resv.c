@@ -130,15 +130,15 @@ xfs_ag_resv_needed(
 		ASSERT(pag->pag_reserved_blocks >=
 		       pag->pag_agfl_reserved_blocks);
 		len = pag->pag_reserved_blocks - pag->pag_agfl_reserved_blocks;
-		trace_xfs_ag_resv_needed(pag->pag_mount, pag->pag_agno, -1,
-				pag->pagf_freeblks, len);
+		trace_xfs_ag_resv_agfl_needed(pag->pag_mount, pag->pag_agno,
+				-1, -1, len, pag);
 		return len;
 	}
 
 	/* Preserve all allocated blocks */
 	if (ar == NULL) {
-		trace_xfs_ag_resv_needed(pag->pag_mount, pag->pag_agno, -2,
-				pag->pagf_freeblks, pag->pag_reserved_blocks);
+		trace_xfs_ag_resv_nores_needed(pag->pag_mount, pag->pag_agno,
+				-2, -2, pag->pag_reserved_blocks, pag);
 		return pag->pag_reserved_blocks;
 	}
 
@@ -146,7 +146,7 @@ xfs_ag_resv_needed(
 	ASSERT(pag->pag_reserved_blocks >= resv_needed(ar));
 	len = pag->pag_reserved_blocks - resv_needed(ar);
 	trace_xfs_ag_resv_needed(ar->ar_mount, ar->ar_agno, ar->ar_blocks,
-			ar->ar_inuse, len);
+			ar->ar_inuse, len, pag);
 	return len;
 }
 
@@ -159,7 +159,7 @@ xfs_ag_resv_free(
 	int				error;
 
 	trace_xfs_ag_resv_free(ar->ar_mount, ar->ar_agno, ar->ar_blocks,
-			ar->ar_inuse);
+			ar->ar_inuse, pag);
 	pag->pag_reserved_blocks -= resv_needed(ar);
 	if (ar->ar_flags & XFS_AG_RESV_AGFL)
 		pag->pag_agfl_reserved_blocks -= resv_needed(ar);
@@ -195,7 +195,6 @@ xfs_ag_resv_init(
 	ar->ar_blocks = blocks;
 	ar->ar_inuse = inuse;
 	ar->ar_flags = flags;
-	trace_xfs_ag_resv_init(mp, pag->pag_agno, blocks, inuse);
 
 	pag->pag_reserved_blocks += resv_needed(ar);
 	if (ar->ar_flags & XFS_AG_RESV_AGFL)
@@ -203,6 +202,7 @@ xfs_ag_resv_init(
 	*par = ar;
 
 	error = xfs_mod_fdblocks(mp, -(int64_t)resv_needed(ar), false);
+	trace_xfs_ag_resv_init(mp, pag->pag_agno, blocks, inuse, pag);
 	if (!error && pag->pag_reserved_blocks > pag->pagf_freeblks)
 		error = -ENOSPC;
 
@@ -223,7 +223,7 @@ xfs_ag_resv_alloc_block(
 		return;
 
 	trace_xfs_ag_resv_alloc_block(ar->ar_mount, ar->ar_agno, ar->ar_blocks,
-			ar->ar_inuse);
+			ar->ar_inuse, pag);
 	ar->ar_inuse++;
 	if (ar->ar_inuse <= ar->ar_blocks) {
 		pag->pag_reserved_blocks--;
@@ -247,7 +247,7 @@ xfs_ag_resv_free_block(
 		return;
 
 	trace_xfs_ag_resv_free_block(ar->ar_mount, ar->ar_agno, ar->ar_blocks,
-			ar->ar_inuse);
+			ar->ar_inuse, pag);
 	ar->ar_inuse--;
 	pag->pag_reserved_blocks++;
 	if (ar->ar_flags & XFS_AG_RESV_AGFL)
