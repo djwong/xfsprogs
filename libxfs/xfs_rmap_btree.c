@@ -223,9 +223,11 @@ xfs_rmapbt_init_rec_from_cur(
 	union xfs_btree_rec	*rec)
 {
 	rec->rmap.rm_startblock = cpu_to_be32(cur->bc_rec.r.rm_startblock);
-	rec->rmap.rm_blockcount = cpu_to_be32(cur->bc_rec.r.rm_blockcount);
+	rec->rmap.rm_blockcount = cpu_to_be32(
+			xfs_rmap_irec_blockcount_pack(&cur->bc_rec.r));
 	rec->rmap.rm_owner = cpu_to_be64(cur->bc_rec.r.rm_owner);
-	rec->rmap.rm_offset = cpu_to_be64(cur->bc_rec.r.rm_offset);
+	rec->rmap.rm_offset = cpu_to_be64(
+			xfs_rmap_irec_offset_pack(&cur->bc_rec.r));
 }
 
 STATIC void
@@ -259,16 +261,27 @@ xfs_rmapxbt_key_diff(
 {
 	struct xfs_rmap_irec	*rec = &cur->bc_rec.r;
 	struct xfs_rmapx_key	*kp = &key->rmapx;
+	__u64			x, y;
 	__int64_t		d;
 
 	d = (__int64_t)be32_to_cpu(kp->rm_startblock) - rec->rm_startblock;
 	if (d)
 		return d;
-	d = (__int64_t)be64_to_cpu(kp->rm_owner) - rec->rm_owner;
-	if (d)
-		return d;
-	d = (__int64_t)be64_to_cpu(kp->rm_offset) - rec->rm_offset;
-	return d;
+
+	x = be64_to_cpu(kp->rm_owner);
+	y = rec->rm_owner;
+	if (x > y)
+		return 1;
+	else if (y > x)
+		return -1;
+
+	x = be64_to_cpu(kp->rm_offset);
+	y = xfs_rmap_irec_offset_pack(rec);
+	if (x > y)
+		return 1;
+	else if (y > x)
+		return -1;
+	return 0;
 }
 
 STATIC __int64_t

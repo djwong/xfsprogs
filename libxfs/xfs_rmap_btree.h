@@ -71,11 +71,14 @@ int xfs_rmapbt_maxrecs(struct xfs_mount *mp, int blocklen, int leaf);
 int xfs_rmapxbt_maxrecs(struct xfs_mount *mp, int blocklen, int leaf);
 
 int xfs_rmap_lookup_le(struct xfs_btree_cur *cur, xfs_agblock_t	bno,
-		xfs_extlen_t len, uint64_t owner, uint64_t offset, int *stat);
+		xfs_extlen_t len, uint64_t owner, uint64_t offset,
+		unsigned int flags, int *stat);
 int xfs_rmap_lookup_eq(struct xfs_btree_cur *cur, xfs_agblock_t	bno,
-		xfs_extlen_t len, uint64_t owner, uint64_t offset, int *stat);
+		xfs_extlen_t len, uint64_t owner, uint64_t offset,
+		unsigned int flags, int *stat);
 int xfs_rmapbt_insert(struct xfs_btree_cur *rcur, xfs_agblock_t	agbno,
-		xfs_extlen_t len, uint64_t owner, uint64_t offset);
+		xfs_extlen_t len, uint64_t owner, uint64_t offset,
+		unsigned int flags);
 int xfs_rmap_get_rec(struct xfs_btree_cur *cur, struct xfs_rmap_irec *irec,
 		int *stat);
 

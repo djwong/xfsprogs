@@ -174,12 +174,13 @@ add_rmap(
 	rmaps = ag_rmaps[agno].ar_rmaps;
 	rmap.rm_owner = ino;
 	rmap.rm_offset = irec->br_startoff;
+	rmap.rm_flags = 0;
 	if (whichfork == XFS_ATTR_FORK)
-		rmap.rm_offset |= XFS_RMAP_OFF_ATTR;
+		rmap.rm_flags |= XFS_RMAP_ATTR_FORK;
 	rmap.rm_startblock = agbno;
 	rmap.rm_blockcount = irec->br_blockcount;
 	if (irec->br_state == XFS_EXT_UNWRITTEN)
-		rmap.rm_blockcount |= XFS_RMAP_LEN_UNWRITTEN;
+		rmap.rm_flags |= XFS_RMAP_UNWRITTEN;
 	return slab_add(rmaps, &rmap);
 }
 
@@ -199,10 +200,11 @@ __add_raw_rmap(
 	ASSERT(len != 0);
 	rmap.rm_owner = owner;
 	rmap.rm_offset = 0;
+	rmap.rm_flags = 0;
 	if (is_attr)
-		rmap.rm_offset |= XFS_RMAP_OFF_ATTR;
+		rmap.rm_flags |= XFS_RMAP_ATTR_FORK;
 	if (is_bmbt)
-		rmap.rm_offset |= XFS_RMAP_OFF_BMBT;
+		rmap.rm_flags |= XFS_RMAP_BMBT;
 	rmap.rm_startblock = agbno;
 	rmap.rm_blockcount = len;
 	return slab_add(ag_rmaps[agno].ar_raw_rmaps, &rmap);
@@ -270,12 +272,12 @@ mergeable_rmaps(
 	if (XFS_RMAP_NON_INODE_OWNER(r2->rm_owner))
 		return true;
 	/* must be an inode owner */
-	if (XFS_RMAP_IS_ATTR_FORK(r1->rm_offset) ^
-	    XFS_RMAP_IS_ATTR_FORK(r2->rm_offset))
+	if ((r1->rm_flags & XFS_RMAP_ATTR_FORK) ^
+	    (r2->rm_flags & XFS_RMAP_ATTR_FORK))
 		return false;
-	if (XFS_RMAP_IS_BMBT(r1->rm_offset) || XFS_RMAP_IS_BMBT(r2->rm_offset))
-		return XFS_RMAP_IS_BMBT(r1->rm_offset) &&
-		       XFS_RMAP_IS_BMBT(r2->rm_offset);
+	if ((r1->rm_flags & XFS_RMAP_BMBT) || (r2->rm_flags & XFS_RMAP_BMBT))
+		return  (r1->rm_flags & XFS_RMAP_BMBT) &&
+			(r2->rm_flags & XFS_RMAP_BMBT);
 	return r1->rm_offset + r1->rm_blockcount == r2->rm_offset;
 }
 
@@ -528,7 +530,7 @@ store_ag_btree_rmap_data(
 
 		error = xfs_rmapbt_insert(bt_cur, rm_rec->rm_startblock,
 				rm_rec->rm_blockcount, rm_rec->rm_owner,
-				rm_rec->rm_offset);
+				rm_rec->rm_offset, rm_rec->rm_flags);
 		if (error)
 			goto err_rmapcur;
 
@@ -567,13 +569,14 @@ dump_rmap(
 	xfs_agnumber_t		agno,
 	struct xfs_rmap_irec	*rmap)
 {
-	printf("%s: %p agno=%u pblk=%llu ino=%lld lblk=%llu len=%u\n", msg,
-		rmap,
+	printf("%s: %p agno=%u pblk=%llu owner=%lld lblk=%llu len=%u flags=0x%x\n",
+		msg, rmap,
 		(unsigned)agno,
 		(unsigned long long)rmap->rm_startblock,
 		(unsigned long long)rmap->rm_owner,
 		(unsigned long long)rmap->rm_offset,
-		(unsigned)rmap->rm_blockcount);
+		(unsigned)rmap->rm_blockcount,
+		(unsigned)rmap->rm_flags);
 }
 #else
 # define dump_rmap(m, a, r)
@@ -651,7 +654,7 @@ dump_rmap(
  */
 static void
 mark_inode_rl(
-	struct xfs_mount		*mp,
+	struct xfs_mount	*mp,
 	struct xfs_bag		*rmaps)
 {
 	xfs_agnumber_t		iagno;
@@ -713,10 +716,10 @@ _("Insufficient memory while recreating refcount tree."));
  * Transform a pile of physical block mapping observations into refcount data
  * for eventual rebuilding of the btrees.
  */
-#define RMAP_END(r)	((r)->rm_startblock + XFS_RMAP_LEN((r)->rm_blockcount))
+#define RMAP_END(r)	((r)->rm_startblock + (r)->rm_blockcount)
 int
 compute_refcounts(
-	struct xfs_mount		*mp,
+	struct xfs_mount	*mp,
 	xfs_agnumber_t		agno)
 {
 	struct xfs_bag		*stack_top = NULL;
@@ -918,23 +921,23 @@ check_rmaps(
 		/* Look for a rmap record in the btree */
 		error = xfs_rmap_lookup_eq(bt_cur, rm_rec->rm_startblock,
 				rm_rec->rm_blockcount, rm_rec->rm_owner,
-				rm_rec->rm_offset, &have);
+				rm_rec->rm_offset, rm_rec->rm_flags, &have);
 		if (error)
 			goto err;
 		if (!have) {
 			do_warn(
-_("Missing reverse-mapping record for (%u/%u) %slen %u owner %"PRIx64" \
-%s%soff %"PRIx64"\n"),
+_("Missing reverse-mapping record for (%u/%u) %slen %u owner %"PRId64" \
+%s%soff %"PRIu64"\n"),
 				agno, rm_rec->rm_startblock,
-				XFS_RMAP_IS_UNWRITTEN(rm_rec->rm_blockcount) ?
+				(rm_rec->rm_flags & XFS_RMAP_UNWRITTEN) ?
 					_("unwritten ") : "",
-				XFS_RMAP_LEN(rm_rec->rm_blockcount),
+				rm_rec->rm_blockcount,
 				rm_rec->rm_owner,
-				XFS_RMAP_IS_ATTR_FORK(rm_rec->rm_offset) ?
+				(rm_rec->rm_flags & XFS_RMAP_ATTR_FORK) ?
 					_("attr ") : "",
-				XFS_RMAP_IS_BMBT(rm_rec->rm_offset) ?
+				(rm_rec->rm_flags & XFS_RMAP_BMBT) ?
 					_("bmbt ") : "",
-				XFS_RMAP_OFF(rm_rec->rm_offset));
+				rm_rec->rm_offset);
 			goto next_loop;
 		}
 
@@ -943,18 +946,18 @@ _("Missing reverse-mapping record for (%u/%u) %slen %u owner %"PRIx64" \
 			goto err;
 		if (!i) {
 			do_warn(
-_("Unretrievable reverse-mapping record for (%u/%u) %slen %u owner %"PRIx64" \
-%s%soff %"PRIx64"\n"),
+_("Unretrievable reverse-mapping record for (%u/%u) %slen %u owner %"PRId64" \
+%s%soff %"PRIu64"\n"),
 				agno, rm_rec->rm_startblock,
-				XFS_RMAP_IS_UNWRITTEN(rm_rec->rm_blockcount) ?
+				(rm_rec->rm_flags & XFS_RMAP_UNWRITTEN) ?
 					_("unwritten ") : "",
-				XFS_RMAP_LEN(rm_rec->rm_blockcount),
+				rm_rec->rm_blockcount,
 				rm_rec->rm_owner,
-				XFS_RMAP_IS_ATTR_FORK(rm_rec->rm_offset) ?
+				(rm_rec->rm_flags & XFS_RMAP_ATTR_FORK) ?
 					_("attr ") : "",
-				XFS_RMAP_IS_BMBT(rm_rec->rm_offset) ?
+				(rm_rec->rm_flags & XFS_RMAP_BMBT) ?
 					_("bmbt ") : "",
-				XFS_RMAP_OFF(rm_rec->rm_offset));
+				rm_rec->rm_offset);
 			goto next_loop;
 		}
 
@@ -962,30 +965,31 @@ _("Unretrievable reverse-mapping record for (%u/%u) %slen %u owner %"PRIx64" \
 		if (tmp.rm_startblock != rm_rec->rm_startblock ||
 		    tmp.rm_blockcount != rm_rec->rm_blockcount ||
 		    tmp.rm_owner != rm_rec->rm_owner ||
-		    tmp.rm_offset != rm_rec->rm_offset)
+		    tmp.rm_offset != rm_rec->rm_offset ||
+		    tmp.rm_flags != rm_rec->rm_flags)
 			do_warn(
-_("Incorrect reverse-mapping: saw (%u/%u) %slen %u owner %"PRIx64" %s%soff \
-%"PRIx64"; should be (%u/%u) %slen %u owner %"PRIx64" %s%soff %"PRIx64"\n"),
+_("Incorrect reverse-mapping: saw (%u/%u) %slen %u owner %"PRId64" %s%soff \
+%"PRIu64"; should be (%u/%u) %slen %u owner %"PRId64" %s%soff %"PRIu64"\n"),
 				agno, tmp.rm_startblock,
-				XFS_RMAP_IS_UNWRITTEN(tmp.rm_blockcount) ?
+				(tmp.rm_flags & XFS_RMAP_UNWRITTEN) ?
 					_("unwritten ") : "",
-				XFS_RMAP_LEN(tmp.rm_blockcount),
+				tmp.rm_blockcount,
 				tmp.rm_owner,
-				XFS_RMAP_IS_ATTR_FORK(tmp.rm_offset) ?
+				(tmp.rm_flags & XFS_RMAP_ATTR_FORK) ?
 					_("attr ") : "",
-				XFS_RMAP_IS_BMBT(tmp.rm_offset) ?
+				(tmp.rm_flags & XFS_RMAP_BMBT) ?
 					_("bmbt ") : "",
-				XFS_RMAP_OFF(tmp.rm_offset),
+				tmp.rm_offset,
 				agno, rm_rec->rm_startblock,
-				XFS_RMAP_IS_UNWRITTEN(rm_rec->rm_blockcount) ?
+				(rm_rec->rm_flags & XFS_RMAP_UNWRITTEN) ?
 					_("unwritten ") : "",
-				XFS_RMAP_LEN(rm_rec->rm_blockcount),
+				rm_rec->rm_blockcount,
 				rm_rec->rm_owner,
-				XFS_RMAP_IS_ATTR_FORK(rm_rec->rm_offset) ?
+				(rm_rec->rm_flags & XFS_RMAP_ATTR_FORK) ?
 					_("attr ") : "",
-				XFS_RMAP_IS_BMBT(rm_rec->rm_offset) ?
+				(rm_rec->rm_flags & XFS_RMAP_BMBT) ?
 					_("bmbt ") : "",
-				XFS_RMAP_OFF(rm_rec->rm_offset));
+				rm_rec->rm_offset);
 next_loop:
 		rm_rec = pop_slab_cursor(rm_cur);
 	}

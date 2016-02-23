@@ -47,12 +47,14 @@ xfs_rmap_lookup_le(
 	xfs_extlen_t		len,
 	uint64_t		owner,
 	uint64_t		offset,
+	unsigned int		flags,
 	int			*stat)
 {
 	cur->bc_rec.r.rm_startblock = bno;
 	cur->bc_rec.r.rm_blockcount = len;
 	cur->bc_rec.r.rm_owner = owner;
 	cur->bc_rec.r.rm_offset = offset;
+	cur->bc_rec.r.rm_flags = flags;
 	return xfs_btree_lookup(cur, XFS_LOOKUP_LE, stat);
 }
 
@@ -67,12 +69,14 @@ xfs_rmap_lookup_eq(
 	xfs_extlen_t		len,
 	uint64_t		owner,
 	uint64_t		offset,
+	unsigned int		flags,
 	int			*stat)
 {
 	cur->bc_rec.r.rm_startblock = bno;
 	cur->bc_rec.r.rm_blockcount = len;
 	cur->bc_rec.r.rm_owner = owner;
 	cur->bc_rec.r.rm_offset = offset;
+	cur->bc_rec.r.rm_flags = flags;
 	return xfs_btree_lookup(cur, XFS_LOOKUP_EQ, stat);
 }
 
@@ -90,12 +94,12 @@ xfs_rmap_update(
 
 	trace_xfs_rmapbt_update(cur->bc_mp, cur->bc_private.a.agno,
 			irec->rm_startblock, irec->rm_blockcount,
-			irec->rm_owner, irec->rm_offset);
+			irec->rm_owner, irec->rm_offset, irec->rm_flags);
 
 	rec.rmap.rm_startblock = cpu_to_be32(irec->rm_startblock);
-	rec.rmap.rm_blockcount = cpu_to_be32(irec->rm_blockcount);
+	rec.rmap.rm_blockcount = cpu_to_be32(xfs_rmap_irec_blockcount_pack(irec));
 	rec.rmap.rm_owner = cpu_to_be64(irec->rm_owner);
-	rec.rmap.rm_offset = cpu_to_be64(irec->rm_offset);
+	rec.rmap.rm_offset = cpu_to_be64(xfs_rmap_irec_offset_pack(irec));
 	return xfs_btree_update(cur, &rec);
 }
 
@@ -105,15 +109,16 @@ xfs_rmapbt_insert(
 	xfs_agblock_t		agbno,
 	xfs_extlen_t		len,
 	uint64_t		owner,
-	uint64_t		offset)
+	uint64_t		offset,
+	unsigned int		flags)
 {
 	int			i;
 	int			error;
 
 	trace_xfs_rmapbt_insert(rcur->bc_mp, rcur->bc_private.a.agno, agbno,
-			len, owner, offset);
+			len, owner, offset, flags);
 
-	error = xfs_rmap_lookup_eq(rcur, agbno, len, owner, offset, &i);
+	error = xfs_rmap_lookup_eq(rcur, agbno, len, owner, offset, flags, &i);
 	if (error)
 		goto done;
 	XFS_WANT_CORRUPTED_GOTO(rcur->bc_mp, i == 0, done);
@@ -122,6 +127,7 @@ xfs_rmapbt_insert(
 	rcur->bc_rec.r.rm_blockcount = len;
 	rcur->bc_rec.r.rm_owner = owner;
 	rcur->bc_rec.r.rm_offset = offset;
+	rcur->bc_rec.r.rm_flags = flags;
 	error = xfs_btree_insert(rcur, &i);
 	if (error)
 		goto done;
@@ -136,15 +142,16 @@ xfs_rmapbt_delete(
 	xfs_agblock_t		agbno,
 	xfs_extlen_t		len,
 	uint64_t		owner,
-	uint64_t		offset)
+	uint64_t		offset,
+	unsigned int		flags)
 {
 	int			i;
 	int			error;
 
 	trace_xfs_rmapbt_delete(rcur->bc_mp, rcur->bc_private.a.agno, agbno,
-			len, owner, offset);
+			len, owner, offset, flags);
 
-	error = xfs_rmap_lookup_eq(rcur, agbno, len, owner, offset, &i);
+	error = xfs_rmap_lookup_eq(rcur, agbno, len, owner, offset, flags, &i);
 	if (error)
 		goto done;
 	XFS_WANT_CORRUPTED_GOTO(rcur->bc_mp, i == 1, done);
@@ -173,10 +180,12 @@ xfs_rmap_get_rec(
 	if (error || !*stat)
 		return error;
 
+	irec->rm_flags = 0;
 	irec->rm_startblock = be32_to_cpu(rec->rmap.rm_startblock);
-	irec->rm_blockcount = be32_to_cpu(rec->rmap.rm_blockcount);
+	xfs_rmap_irec_blockcount_unpack(be32_to_cpu(rec->rmap.rm_blockcount),
+			irec);
 	irec->rm_owner = be64_to_cpu(rec->rmap.rm_owner);
-	irec->rm_offset = be64_to_cpu(rec->rmap.rm_offset);
+	xfs_rmap_irec_offset_unpack(be64_to_cpu(rec->rmap.rm_offset), irec);
 	return 0;
 }
 
@@ -215,21 +224,21 @@ xfs_rmap_free(
 	int			i;
 	uint64_t		owner;
 	uint64_t		offset;
+	unsigned int		flags;
 
 	if (!xfs_sb_version_hasrmapbt(&mp->m_sb))
 		return 0;
 
+	xfs_owner_info_unpack(oinfo, &owner, &offset, &flags);
 	trace_xfs_rmap_free_extent(mp, agno, bno, len, oinfo);
 	cur = xfs_rmapbt_init_cursor(mp, tp, agbp, agno);
-
-	xfs_owner_info_unpack(oinfo, &owner, &offset);
 
 	/*
 	 * We should always have a left record because there's a static record
 	 * for the AG headers at rm_startblock == 0 created by mkfs/growfs that
 	 * will not ever be removed from the tree.
 	 */
-	error = xfs_rmap_lookup_le(cur, bno, len, owner, offset, &i);
+	error = xfs_rmap_lookup_le(cur, bno, len, owner, offset, flags, &i);
 	if (error)
 		goto out_error;
 	XFS_WANT_CORRUPTED_GOTO(mp, i == 1, out_error);
@@ -238,7 +247,7 @@ xfs_rmap_free(
 	if (error)
 		goto out_error;
 	XFS_WANT_CORRUPTED_GOTO(mp, i == 1, out_error);
-	ltoff = ltrec.rm_offset & ~XFS_RMAP_OFF_BMBT;
+	ltoff = ltrec.rm_offset;
 
 	/*
 	 * For growfs, the incoming extent must be beyond the left record we
@@ -261,10 +270,10 @@ xfs_rmap_free(
 	//		ltrec.rm_blockcount, ltrec.rm_owner);
 
 	/* make sure the extent we found covers the entire freeing range. */
-	XFS_WANT_CORRUPTED_GOTO(mp, !XFS_RMAP_IS_UNWRITTEN(ltrec.rm_blockcount),
+	XFS_WANT_CORRUPTED_GOTO(mp, !(ltrec.rm_flags & XFS_RMAP_UNWRITTEN),
 		out_error);
 	XFS_WANT_CORRUPTED_GOTO(mp, ltrec.rm_startblock <= bno &&
-		ltrec.rm_startblock + XFS_RMAP_LEN(ltrec.rm_blockcount) >=
+		ltrec.rm_startblock + ltrec.rm_blockcount >=
 		bno + len, out_error);
 
 	/* make sure the owner matches what we expect to find in the tree */
@@ -273,9 +282,9 @@ xfs_rmap_free(
 
 	/* check the offset, if necessary */
 	if (!XFS_RMAP_NON_INODE_OWNER(owner)) {
-		if (XFS_RMAP_IS_BMBT(offset)) {
+		if (flags & XFS_RMAP_BMBT) {
 			XFS_WANT_CORRUPTED_GOTO(mp,
-					XFS_RMAP_IS_BMBT(ltrec.rm_offset),
+					ltrec.rm_flags & XFS_RMAP_BMBT,
 					out_error);
 		} else {
 			XFS_WANT_CORRUPTED_GOTO(mp,
@@ -357,6 +366,7 @@ xfs_rmap_free(
 						     ltrec.rm_blockcount;
 		cur->bc_rec.r.rm_owner = ltrec.rm_owner;
 		cur->bc_rec.r.rm_offset = offset;
+		cur->bc_rec.r.rm_flags = flags;
 		error = xfs_btree_insert(cur, &i);
 		if (error)
 			goto out_error;
@@ -381,18 +391,18 @@ static bool
 is_mergeable_rmap(
 	struct xfs_rmap_irec	*irec,
 	uint64_t		owner,
-	uint64_t		offset)
+	uint64_t		offset,
+	unsigned int		flags)
 {
 	if (irec->rm_owner == XFS_RMAP_OWN_NULL)
 		return false;
 	if (irec->rm_owner != owner)
 		return false;
-	if (XFS_RMAP_IS_UNWRITTEN(irec->rm_blockcount))
+	if ((flags & XFS_RMAP_UNWRITTEN) & (irec->rm_flags & XFS_RMAP_UNWRITTEN))
 		return false;
-	if (XFS_RMAP_IS_ATTR_FORK(offset) ^
-	    XFS_RMAP_IS_ATTR_FORK(irec->rm_offset))
+	if ((flags & XFS_RMAP_ATTR_FORK) ^ (irec->rm_flags & XFS_RMAP_ATTR_FORK))
 		return false;
-	if (XFS_RMAP_IS_BMBT(offset) ^ XFS_RMAP_IS_BMBT(irec->rm_offset))
+	if ((flags & XFS_RMAP_BMBT) ^ (irec->rm_flags & XFS_RMAP_BMBT))
 		return false;
 	return true;
 }
@@ -421,21 +431,21 @@ xfs_rmap_alloc(
 	int			i;
 	uint64_t		owner;
 	uint64_t		offset;
+	unsigned int		flags = 0;
 
 	if (!xfs_sb_version_hasrmapbt(&mp->m_sb))
 		return 0;
 
+	xfs_owner_info_unpack(oinfo, &owner, &offset, &flags);
 	trace_xfs_rmap_alloc_extent(mp, agno, bno, len, oinfo);
 	cur = xfs_rmapbt_init_cursor(mp, tp, agbp, agno);
-
-	xfs_owner_info_unpack(oinfo, &owner, &offset);
 
 	/*
 	 * For the initial lookup, look for and exact match or the left-adjacent
 	 * record for our insertion point. This will also give us the record for
 	 * start block contiguity tests.
 	 */
-	error = xfs_rmap_lookup_le(cur, bno, len, owner, offset, &i);
+	error = xfs_rmap_lookup_le(cur, bno, len, owner, offset, flags, &i);
 	if (error)
 		goto out_error;
 	XFS_WANT_CORRUPTED_GOTO(mp, i == 1, out_error);
@@ -447,7 +457,7 @@ xfs_rmap_alloc(
 	//printk("rmalloc ag %d bno 0x%x/0x%x/0x%llx, ltrec 0x%x/0x%x/0x%llx\n",
 	//		agno, bno, len, owner, ltrec.rm_startblock,
 	//		ltrec.rm_blockcount, ltrec.rm_owner);
-	if (!is_mergeable_rmap(&ltrec, owner, offset))
+	if (!is_mergeable_rmap(&ltrec, owner, offset, flags))
 		ltrec.rm_owner = XFS_RMAP_OWN_NULL;
 
 	XFS_WANT_CORRUPTED_GOTO(mp,
@@ -475,7 +485,7 @@ xfs_rmap_alloc(
 	} else {
 		gtrec.rm_owner = XFS_RMAP_OWN_NULL;
 	}
-	if (!is_mergeable_rmap(&gtrec, owner, offset))
+	if (!is_mergeable_rmap(&gtrec, owner, offset, flags))
 		gtrec.rm_owner = XFS_RMAP_OWN_NULL;
 
 	/*
@@ -548,6 +558,7 @@ xfs_rmap_alloc(
 		cur->bc_rec.r.rm_blockcount = len;
 		cur->bc_rec.r.rm_owner = owner;
 		cur->bc_rec.r.rm_offset = offset;
+		cur->bc_rec.r.rm_flags = flags;
 		error = xfs_btree_insert(cur, &i);
 		if (error)
 			goto out_error;
@@ -564,31 +575,18 @@ out_error:
 	return error;
 }
 
-/* Encode logical offset for a rmapbt record */
-STATIC uint64_t
-b2r_off(
-	int		whichfork,
-	xfs_fileoff_t	off)
-{
-	uint64_t	x;
-
-	x = off;
-	if (whichfork == XFS_ATTR_FORK)
-		x |= XFS_RMAP_OFF_ATTR;
-	return x;
-}
-
-/* Encode blockcount for a rmapbt record */
-STATIC xfs_extlen_t
-b2r_len(
+static unsigned int
+b2r_flags(
+	int			whichfork,
 	struct xfs_bmbt_irec	*irec)
 {
-	xfs_extlen_t		x;
+	unsigned int		f = 0;
 
-	x = irec->br_blockcount;
+	if (whichfork == XFS_ATTR_FORK)
+		f |= XFS_RMAP_ATTR_FORK;
 	if (irec->br_state == XFS_EXT_UNWRITTEN)
-		x |= XFS_RMAP_LEN_UNWRITTEN;
-	return x;
+		f |= XFS_RMAP_UNWRITTEN;
+	return f;
 }
 
 static int
@@ -628,8 +626,8 @@ __xfs_rmap_combine(
 	/* Delete right rmap */
 	error = xfs_rmapbt_delete(rcur,
 			XFS_FSB_TO_AGBNO(rcur->bc_mp, RIGHT->br_startblock),
-			b2r_len(RIGHT), ino,
-			b2r_off(whichfork, RIGHT->br_startoff));
+			RIGHT->br_blockcount, ino, RIGHT->br_startoff,
+			b2r_flags(whichfork, RIGHT));
 	if (error)
 		goto done;
 
@@ -638,8 +636,8 @@ __xfs_rmap_combine(
 		error = xfs_rmapbt_delete(rcur,
 				XFS_FSB_TO_AGBNO(rcur->bc_mp,
 						PREV->br_startblock),
-				b2r_len(PREV), ino,
-				b2r_off(whichfork, PREV->br_startoff));
+				PREV->br_blockcount, ino, PREV->br_startoff,
+				b2r_flags(whichfork, PREV));
 		if (error)
 			goto done;
 	}
@@ -673,8 +671,8 @@ __xfs_rmap_lcombine(
 		error = xfs_rmapbt_delete(rcur,
 				XFS_FSB_TO_AGBNO(rcur->bc_mp,
 						PREV->br_startblock),
-				b2r_len(PREV), ino,
-				b2r_off(whichfork, PREV->br_startoff));
+				PREV->br_blockcount, ino, PREV->br_startoff,
+				b2r_flags(whichfork, PREV));
 		if (error)
 			goto done;
 	}
@@ -708,8 +706,8 @@ __xfs_rmap_rcombine(
 		error = xfs_rmapbt_delete(rcur,
 				XFS_FSB_TO_AGBNO(rcur->bc_mp,
 						PREV->br_startblock),
-				b2r_len(PREV), ino,
-				b2r_off(whichfork, PREV->br_startoff));
+				PREV->br_blockcount, ino, PREV->br_startoff,
+				b2r_flags(whichfork, PREV));
 		if (error)
 			goto done;
 	}
@@ -737,8 +735,8 @@ __xfs_rmap_insert(
 
 	return xfs_rmapbt_insert(rcur,
 			XFS_FSB_TO_AGBNO(rcur->bc_mp, rec->br_startblock),
-			b2r_len(rec), ino,
-			b2r_off(whichfork, rec->br_startoff));
+			rec->br_blockcount, ino, rec->br_startoff,
+			b2r_flags(whichfork, rec));
 }
 
 /* Delete a rmap extent */
@@ -757,8 +755,8 @@ __xfs_rmap_delete(
 
 	return xfs_rmapbt_delete(rcur,
 			XFS_FSB_TO_AGBNO(rcur->bc_mp, rec->br_startblock),
-			b2r_len(rec), ino,
-			b2r_off(whichfork, rec->br_startoff));
+			rec->br_blockcount, ino, rec->br_startoff,
+			b2r_flags(whichfork, rec));
 }
 
 /* Change the start of an rmap */
@@ -782,8 +780,8 @@ __xfs_rmap_move(
 	/* Delete prev rmap */
 	error = xfs_rmapbt_delete(rcur,
 			XFS_FSB_TO_AGBNO(rcur->bc_mp, PREV->br_startblock),
-			b2r_len(PREV), ino,
-			b2r_off(whichfork, PREV->br_startoff));
+			PREV->br_blockcount, ino, PREV->br_startoff,
+			b2r_flags(whichfork, PREV));
 	if (error)
 		goto done;
 
@@ -794,8 +792,8 @@ __xfs_rmap_move(
 	irec.br_blockcount -= start_adj;
 	return xfs_rmapbt_insert(rcur,
 			XFS_FSB_TO_AGBNO(rcur->bc_mp, irec.br_startblock),
-			b2r_len(&irec), ino,
-			b2r_off(whichfork, irec.br_startoff));
+			irec.br_blockcount, ino, irec.br_startoff,
+			b2r_flags(whichfork, &irec));
 done:
 	return error;
 }
@@ -820,16 +818,16 @@ __xfs_rmap_slide(
 	/* Delete prev rmap */
 	error = xfs_rmapbt_delete(rcur,
 			XFS_FSB_TO_AGBNO(rcur->bc_mp, PREV->br_startblock),
-			b2r_len(PREV), ino,
-			b2r_off(whichfork, PREV->br_startoff));
+			PREV->br_blockcount, ino, PREV->br_startoff,
+			b2r_flags(whichfork, PREV));
 	if (error)
 		goto done;
 
 	/* Re-add rmap with new logical offset */
 	return xfs_rmapbt_insert(rcur,
 			XFS_FSB_TO_AGBNO(rcur->bc_mp, PREV->br_startblock),
-			b2r_len(PREV), ino,
-			b2r_off(whichfork, PREV->br_startoff + start_adj));
+			PREV->br_blockcount, ino, PREV->br_startoff + start_adj,
+			b2r_flags(whichfork, PREV));
 done:
 	return error;
 }
@@ -845,7 +843,6 @@ __xfs_rmap_resize(
 {
 	int			i;
 	int			error;
-	struct xfs_bmbt_irec	irec;
 	struct xfs_rmap_irec	rrec;
 
 	if (!rcur)
@@ -856,8 +853,8 @@ __xfs_rmap_resize(
 
 	error = xfs_rmap_lookup_eq(rcur,
 			XFS_FSB_TO_AGBNO(rcur->bc_mp, PREV->br_startblock),
-			b2r_len(PREV), ino,
-			b2r_off(whichfork, PREV->br_startoff), &i);
+			PREV->br_blockcount, ino, PREV->br_startoff,
+			b2r_flags(whichfork, PREV), &i);
 	if (error)
 		goto done;
 	XFS_WANT_CORRUPTED_GOTO(rcur->bc_mp, i == 1, done);
@@ -865,9 +862,8 @@ __xfs_rmap_resize(
 	if (error)
 		goto done;
 	XFS_WANT_CORRUPTED_GOTO(rcur->bc_mp, i == 1, done);
-	irec = *PREV;
-	irec.br_blockcount += size_adj;
-	rrec.rm_blockcount = b2r_len(&irec);
+	rrec.rm_blockcount = PREV->br_blockcount + size_adj;
+	rrec.rm_flags = b2r_flags(whichfork, PREV);
 	error = xfs_rmap_update(rcur, &rrec);
 	if (error)
 		goto done;

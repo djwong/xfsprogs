@@ -1508,7 +1508,8 @@ prop_rmap_cursor(xfs_mount_t *mp, xfs_agnumber_t agno, bt_status_t *btree_curs,
 
 		bt_keyx->rm_startblock = cpu_to_be32(rm_rec->rm_startblock);
 		bt_keyx->rm_owner = cpu_to_be64(rm_rec->rm_owner);
-		bt_keyx->rm_offset = cpu_to_be64(rm_rec->rm_offset);
+		bt_keyx->rm_offset = cpu_to_be64(
+				xfs_rmap_irec_offset_pack(rm_rec));
 	} else {
 		bt_key = XFS_RMAP_KEY_ADDR(bt_hdr,
 					    be16_to_cpu(bt_hdr->bb_numrecs));
@@ -1609,10 +1610,11 @@ _("Insufficient memory to construct reverse-map cursor."));
 			ASSERT(rm_rec != NULL);
 			bt_rec[j].rm_startblock =
 					cpu_to_be32(rm_rec->rm_startblock);
-			bt_rec[j].rm_blockcount =
-					cpu_to_be32(rm_rec->rm_blockcount);
+			bt_rec[j].rm_blockcount = cpu_to_be32(
+					xfs_rmap_irec_blockcount_pack(rm_rec));
 			bt_rec[j].rm_owner = cpu_to_be64(rm_rec->rm_owner);
-			bt_rec[j].rm_offset = cpu_to_be64(rm_rec->rm_offset);
+			bt_rec[j].rm_offset = cpu_to_be64(
+					xfs_rmap_irec_offset_pack(rm_rec));
 
 			rm_rec = pop_slab_cursor(rmap_cur);
 		}
