@@ -161,6 +161,8 @@ xfs_ag_resv_free(
 	trace_xfs_ag_resv_free(ar->ar_mount, ar->ar_agno, ar->ar_blocks,
 			ar->ar_inuse);
 	pag->pag_reserved_blocks -= resv_needed(ar);
+	if (ar->ar_flags & XFS_AG_RESV_AGFL)
+		pag->pag_agfl_reserved_blocks -= resv_needed(ar);
 	error = xfs_mod_fdblocks(ar->ar_mount, resv_needed(ar), false);
 	kmem_free(ar);
 
