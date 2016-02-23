@@ -938,10 +938,17 @@ __xfs_rmap_finish(
 	struct xfs_buf		*agbp = NULL;
 	int			error = 0;
 	xfs_agnumber_t		agno;
+	struct xfs_alloc_arg	args;
+	xfs_extlen_t		need;
+	struct xfs_perag	*pag = NULL;
 
 	if (rlist->rl_count == 0)
 		return 0;
 
+	memset(&args, 0, sizeof(args));
+	args.mp = mp;
+	args.tp = tp;
+	args.type = XFS_ALLOCTYPE_NEAR_BNO;
 	ASSERT(rlist->rl_first != NULL);
 	for (free = rlist->rl_first; free; free = next) {
 		agno = rmap_ag(mp, free);
@@ -951,20 +958,45 @@ __xfs_rmap_finish(
 			break;
 		}
 
-		ASSERT(rcur == NULL || agno >= rcur->bc_private.a.agno);
-		if (rcur == NULL || agno > rcur->bc_private.a.agno) {
-			if (rcur) {
-				xfs_btree_del_cursor(rcur, XFS_BTREE_NOERROR);
-				xfs_trans_brelse(tp, agbp);
-			}
+		/* If we advance AGs, free the cursor and perag data */
+		if (rcur != NULL && agno > rcur->bc_private.a.agno) {
+			xfs_btree_del_cursor(rcur, XFS_BTREE_NOERROR);
+			xfs_trans_brelse(tp, agbp);
+			xfs_perag_put(pag);
+			rcur = NULL;
+			agbp = NULL;
+			pag = NULL;
+		}
 
+		ASSERT(rcur == NULL || agno == rcur->bc_private.a.agno);
+
+		if (!pag)
+			pag = xfs_perag_get(mp, agno);
+		need = xfs_alloc_min_freelist(mp, pag);
+		if (!agbp) {
 			error = xfs_alloc_read_agf(mp, tp, agno, 0, &agbp);
+			if (error)
+				break;
+		}
+
+		/* If we need more AGFL blocks, delete the cursor */
+		if (rcur && pag->pagf_flcount < need) {
+			xfs_btree_del_cursor(rcur, XFS_BTREE_NOERROR);
+			rcur = NULL;
+		}
+
+		/* No cursor, so we need to ensure the AGFL and get a cursor */
+		if (!rcur) {
+			args.pag = pag;
+			args.agno = agno;
+			args.agbp = agbp;
+			error = xfs_alloc_fix_freelist(&args,
+					XFS_ALLOC_FLAG_FREEING);
 			if (error)
 				break;
 
 			rcur = xfs_rmapbt_init_cursor(mp, tp, agbp, agno);
 			if (!rcur) {
-				xfs_trans_brelse(tp, agbp);
 				error = -ENOMEM;
 				break;
 			}
@@ -1024,6 +1056,8 @@ __xfs_rmap_finish(
 				XFS_BTREE_NOERROR);
 	if (agbp)
 		xfs_trans_brelse(tp, agbp);
+	if (pag)
+		xfs_perag_put(pag);
 
 	for (; free; free = next) {
 		next = free->ri_next;
