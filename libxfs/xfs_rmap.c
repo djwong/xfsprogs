@@ -264,7 +264,7 @@ xfs_rmap_free(
 	 * extent.
 	 */
 	if (owner == XFS_RMAP_OWN_NULL) {
-		XFS_WANT_CORRUPTED_GOTO(mp, bno > ltrec.rm_startblock +
+		XFS_WANT_CORRUPTED_GOTO(mp, bno >= ltrec.rm_startblock +
 						ltrec.rm_blockcount, out_error);
 		goto out_done;
 	}
