@@ -512,6 +512,8 @@ bool xfs_btree_sblock_verify(struct xfs_buf *bp, unsigned int max_recs);
 
 xfs_extlen_t xfs_btree_calc_size(struct xfs_mount *mp, uint *limits,
 		unsigned long long len);
+uint xfs_btree_compute_maxlevels(struct xfs_mount *mp, uint *limits,
+		unsigned long len);
 
 typedef int (*xfs_cb_getroot_pf) (
 	struct xfs_mount	*mp,

@@ -351,8 +351,7 @@ xfs_rmapbt_verify(
 	if (pag && pag->pagf_init) {
 		if (level >= pag->pagf_levels[XFS_BTNUM_RMAPi])
 			return false;
-	} else if (!xfs_sb_version_hasreflink(&mp->m_sb) &&
-		  level >= maxlevels)
+	} else if (level >= mp->m_rmap_maxlevels)
 		return false;
 
 	return xfs_btree_sblock_verify(bp, mp->m_rmap_mxr[level != 0]);
@@ -555,6 +554,18 @@ xfs_rmapxbt_maxrecs(
 		return blocklen / sizeof(struct xfs_rmap_rec);
 	return blocklen /
 		(2 * sizeof(struct xfs_rmapx_key) + sizeof(xfs_rmap_ptr_t));
+}
+
+/* Compute the maximum height of an rmap btree. */
+void
+xfs_rmapbt_compute_maxlevels(
+	struct xfs_mount		*mp)
+{
+	if (xfs_sb_version_hasreflink(&mp->m_sb))
+		mp->m_rmap_maxlevels = XFS_BTREE_MAXLEVELS;
+	else
+		mp->m_rmap_maxlevels = xfs_btree_compute_maxlevels(mp,
+			mp->m_rmap_mnr, mp->m_sb.sb_agblocks);
 }
 
 /* Calculate the refcount btree size for some records. */

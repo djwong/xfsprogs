@@ -212,7 +212,7 @@ xfs_refcountbt_verify(
 	if (pag && pag->pagf_init) {
 		if (level >= pag->pagf_refcount_level)
 			return false;
-	} else if (level >= mp->m_ag_maxlevels)
+	} else if (level >= mp->m_refc_maxlevels)
 		return false;
 
 	return xfs_btree_sblock_verify(bp, mp->m_refc_mxr[level != 0]);
@@ -360,6 +360,15 @@ xfs_refcountbt_maxrecs(
 		return blocklen / sizeof(struct xfs_refcount_rec);
 	return blocklen / (sizeof(struct xfs_refcount_key) +
 			   sizeof(xfs_refcount_ptr_t));
+}
+
+/* Compute the maximum height of a refcount btree. */
+void
+xfs_refcountbt_compute_maxlevels(
+	struct xfs_mount		*mp)
+{
+	mp->m_refc_maxlevels = xfs_btree_compute_maxlevels(mp,
+			mp->m_refc_mnr, mp->m_sb.sb_agblocks);
 }
 
 /* Calculate the refcount btree size for some records. */
