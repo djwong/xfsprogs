@@ -563,7 +563,7 @@ xfs_rmapbt_calc_size(
 	struct xfs_mount	*mp,
 	unsigned long long	len)
 {
-	return xfs_btree_calc_size(mp, mp->m_rmap_mxr, len);
+	return xfs_btree_calc_size(mp, mp->m_rmap_mnr, len);
 }
 
 /*

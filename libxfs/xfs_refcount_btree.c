@@ -368,7 +368,7 @@ xfs_refcountbt_calc_size(
 	struct xfs_mount	*mp,
 	unsigned long long	len)
 {
-	return xfs_btree_calc_size(mp, mp->m_refc_mxr, len);
+	return xfs_btree_calc_size(mp, mp->m_refc_mnr, len);
 }
 
 /*
