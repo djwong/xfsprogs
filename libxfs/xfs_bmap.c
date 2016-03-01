@@ -795,10 +795,10 @@ xfs_bmap_extents_to_btree(
 	XFS_RMAP_INO_BMBT_OWNER(&args.oinfo, ip->i_ino, whichfork);
 	args.firstblock = *firstblock;
 	if (*firstblock == NULLFSBLOCK) {
-try_another_ag:
 		args.type = XFS_ALLOCTYPE_START_BNO;
 		args.fsbno = XFS_INO_TO_FSB(mp, ip->i_ino);
 	} else if (flist->xbf_low) {
+try_another_ag:
 		args.type = XFS_ALLOCTYPE_START_BNO;
 		args.fsbno = *firstblock;
 	} else {
