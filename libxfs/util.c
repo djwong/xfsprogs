@@ -525,7 +525,7 @@ libxfs_bmap_finish(
 		next = free->xbfi_next;
 		error = xfs_free_extent(*tp, free->xbfi_startblock,
 					free->xbfi_blockcount,
-					&free->xbfi_oinfo);
+					&free->xbfi_oinfo, XFS_AG_RESV_NONE);
 		if (error)
 			return error;
 		xfs_bmap_del_free(flist, NULL, free);

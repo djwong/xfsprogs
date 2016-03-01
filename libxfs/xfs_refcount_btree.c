@@ -72,10 +72,10 @@ xfs_refcountbt_alloc_block(
 	int			*stat)
 {
 	struct xfs_alloc_arg	args;		/* block allocation args */
-	struct xfs_perag	*pag;
 	int			error;		/* error return value */
 
-	pag = xfs_perag_get(cur->bc_mp, cur->bc_private.a.agno);
+	XFS_BTREE_TRACE_CURSOR(cur, XBT_ENTRY);
+
 	memset(&args, 0, sizeof(args));
 	args.tp = cur->bc_tp;
 	args.mp = cur->bc_mp;
@@ -85,7 +85,7 @@ xfs_refcountbt_alloc_block(
 	args.firstblock = args.fsbno;
 	XFS_RMAP_AG_OWNER(&args.oinfo, XFS_RMAP_OWN_REFC);
 	args.minlen = args.maxlen = args.prod = 1;
-	args.resv = pag->pagf_refcountbt_resv;
+	args.resv = XFS_AG_RESV_METADATA;
 
 	error = xfs_alloc_vextent(&args);
 	if (error)
@@ -93,7 +93,6 @@ xfs_refcountbt_alloc_block(
 	if (args.fsbno == NULLFSBLOCK) {
 		XFS_BTREE_TRACE_CURSOR(cur, XBT_EXIT);
 		*stat = 0;
-		xfs_perag_put(pag);
 		return 0;
 	}
 	ASSERT(args.agno == cur->bc_private.a.agno);
@@ -101,15 +100,11 @@ xfs_refcountbt_alloc_block(
 
 	new->s = cpu_to_be32(args.agbno);
 
-	xfs_ag_resv_alloc_block(pag->pagf_refcountbt_resv, cur->bc_tp, pag);
-	xfs_perag_put(pag);
-
 	XFS_BTREE_TRACE_CURSOR(cur, XBT_EXIT);
 	*stat = 1;
 	return 0;
 
 out_error:
-	xfs_perag_put(pag);
 	XFS_BTREE_TRACE_CURSOR(cur, XBT_ERROR);
 	return error;
 }
@@ -120,19 +115,15 @@ xfs_refcountbt_free_block(
 	struct xfs_buf		*bp)
 {
 	struct xfs_mount	*mp = cur->bc_mp;
-	struct xfs_perag	*pag;
 	xfs_fsblock_t		fsbno = XFS_DADDR_TO_FSB(mp, XFS_BUF_ADDR(bp));
 	struct xfs_owner_info	oinfo;
 	int			error;
 
 	XFS_RMAP_AG_OWNER(&oinfo, XFS_RMAP_OWN_REFC);
-	error = xfs_free_extent(cur->bc_tp, fsbno, 1, &oinfo);
+	error = xfs_free_extent(cur->bc_tp, fsbno, 1, &oinfo,
+			XFS_AG_RESV_METADATA);
 	if (error)
 		return error;
-
-	pag = xfs_perag_get(cur->bc_mp, cur->bc_private.a.agno);
-	xfs_ag_resv_free_block(pag->pagf_refcountbt_resv, cur->bc_tp, pag);
-	xfs_perag_put(pag);
 
 	xfs_trans_binval(cur->bc_tp, bp);
 	return error;
@@ -438,78 +429,24 @@ xfs_refcountbt_count_tree_blocks(
 }
 
 /*
- * Create reserved block pools for each allocation group.
+ * Figure out how many blocks to reserve and how many are used by this btree.
  */
 int
-xfs_refcountbt_alloc_reserve_pool(
-	struct xfs_mount	*mp)
+xfs_refcountbt_calc_reserves(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno,
+	xfs_extlen_t		*ask,
+	xfs_extlen_t		*used)
 {
-	xfs_agnumber_t		agno;
-	struct xfs_perag	*pag;
-	xfs_extlen_t		pool_len;
-	xfs_extlen_t		tree_len;
-	int			error = 0;
-	int			err;
+	xfs_extlen_t		tree_len = 0;
+	int			error;
 
 	if (!xfs_sb_version_hasreflink(&mp->m_sb))
 		return 0;
 
-	pool_len = xfs_refcountbt_max_size(mp);
-	xfs_ag_resv_type_init(mp, pool_len);
-
-	for (agno = 0; agno < mp->m_sb.sb_agcount; agno++) {
-		pag = xfs_perag_get(mp, agno);
-		if (pag->pagf_refcountbt_resv) {
-			xfs_perag_put(pag);
-			continue;
-		}
-		tree_len = 0;
-		err = xfs_refcountbt_count_tree_blocks(mp, agno, &tree_len);
-		if (err && !error)
-			error = err;
-		err = xfs_ag_resv_init(mp, pag, pool_len, tree_len, 0,
-				&pag->pagf_refcountbt_resv);
-		xfs_perag_put(pag);
-		if (err && !error)
-			error = err;
-	}
-
-	return error;
-}
-
-/*
- * Free the reference count btree pools.
- */
-int
-xfs_refcountbt_free_reserve_pool(
-	struct xfs_mount	*mp)
-{
-	xfs_agnumber_t		agno;
-	struct xfs_perag	*pag;
-	xfs_extlen_t		pool_len, i;
-	int			error = 0;
-	int			err;
-
-	if (!xfs_sb_version_hasreflink(&mp->m_sb))
-		return 0;
-
-	pool_len = 0;
-	for (agno = 0; agno < mp->m_sb.sb_agcount; agno++) {
-		pag = xfs_perag_get(mp, agno);
-		if (!pag->pagf_refcountbt_resv) {
-			xfs_perag_put(pag);
-			continue;
-		}
-		i = xfs_ag_resv_blocks(pag->pagf_refcountbt_resv);
-		if (pool_len < i)
-			pool_len = i;
-		err = xfs_ag_resv_free(pag->pagf_refcountbt_resv, pag);
-		pag->pagf_refcountbt_resv = NULL;
-		xfs_perag_put(pag);
-		if (err && !error)
-			error = err;
-	}
-	xfs_ag_resv_type_free(mp, pool_len);
+	*ask += xfs_refcountbt_max_size(mp);
+	error = xfs_refcountbt_count_tree_blocks(mp, agno, &tree_len);
+	*used += tree_len;
 
 	return error;
 }

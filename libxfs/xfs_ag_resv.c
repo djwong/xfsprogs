@@ -33,6 +33,9 @@
 #include "xfs_bmap_btree.h"
 #include "xfs_ag_resv.h"
 #include "xfs_trans_space.h"
+#include "xfs_refcount_btree.h"
+#include "xfs_rmap_btree.h"
+#include "xfs_btree.h"
 
 /*
  * Per-AG Block Reservations
@@ -63,55 +66,46 @@
  * functions.  In other words, we maintain a virtual allocation via in-core
  * accounting tricks so that we don't have to clean up after a crash. :)
  *
- * Reserved blocks can be obtained by passing the reservation descriptor to
- * the allocator via the resv field in struct xfs_alloc_arg.  For anything
- * that grows in the free space (such as the rmap btree), use the
- * XFS_AG_RESV_AGFL flag to tell the per-AG reservation code to hold the
- * reservation unless the AGFL is trying to allocate blocks.  It might seem
- * a little funny to maintain a reservoir of blocks to feed another reservoir,
- * but the AGFL only holds enough blocks to get through the next transaction.
- * The per-AG reservation is to ensure (we hope) that each AG never runs out
- * of blocks.
- *
- * The xfs_ag_resv structure maintains a reservation in a specific AG; this
- * structure can be passed via struct xfs_alloc_arg to allocate the reserved
- * space, and the alloc_block/free_block functions should be used to count
- * allocations and frees from the reservation.  The two resv_type* functions
- * are used to update ag_max_usable.
+ * Reserved blocks can be managed by passing one of the enum xfs_ag_resv_type
+ * values via struct xfs_alloc_arg or directly to the xfs_free_extent
+ * function.  It might seem a little funny to maintain a reservoir of blocks
+ * to feed another reservoir, but the AGFL only holds enough blocks to get
+ * through the next transaction.  The per-AG reservation is to ensure (we
+ * hope) that each AG never runs out of blocks.  Each data structure wanting
+ * to use the reservation system should update ask/used in xfs_ag_resv_init.
  */
-
-static inline xfs_extlen_t
-resv_needed(
-	struct xfs_ag_resv		*ar)
-{
-	ASSERT(ar->ar_blocks >= ar->ar_inuse);
-	return ar->ar_blocks - ar->ar_inuse;
-}
-
-struct xfs_ag_resv xfs_ag_agfl_resv = { NULL };
 
 /*
  * Are we critically low on blocks?  For now we'll define that as the number
  * of blocks we can get our hands on being less than 10% of what we reserved
- * or less than some arbitrary number (eight), or if the free space is less
- * than all the reservations.
+ * or less than some arbitrary number (eight).
  */
 bool
 xfs_ag_resv_critical(
-	struct xfs_ag_resv		*ar,
-	struct xfs_perag		*pag)
+	struct xfs_perag		*pag,
+	enum xfs_ag_resv_type		type)
 {
 	xfs_extlen_t			avail;
+	xfs_extlen_t			orig;
 
-	if (pag->pagf_freeblks < pag->pag_reserved_blocks)
-		return true;
-	avail = pag->pagf_freeblks - pag->pag_reserved_blocks;
-	if (ar->ar_flags & XFS_AG_RESV_AGFL)
-		avail += pag->pag_agfl_reserved_blocks;
-	else
-		avail += resv_needed(ar);
+	switch (type) {
+	case XFS_AG_RESV_METADATA:
+		avail = pag->pagf_freeblks - pag->pag_agfl_resv.ar_reserved;
+		orig = pag->pag_meta_resv.ar_asked;
+		break;
+	case XFS_AG_RESV_AGFL:
+		avail = pag->pagf_freeblks + pag->pagf_flcount -
+			pag->pag_meta_resv.ar_reserved;
+		orig = pag->pag_agfl_resv.ar_asked;
+		break;
+	default:
+		ASSERT(0);
+		return false;
+	}
 
-	return avail < ar->ar_blocks / 10 || avail < 8;
+	trace_xfs_ag_resv_critical(pag, type, avail);
+
+	return avail < orig / 10 || avail < XFS_BTREE_MAXLEVELS;
 }
 
 /*
@@ -120,137 +114,219 @@ xfs_ag_resv_critical(
  */
 xfs_extlen_t
 xfs_ag_resv_needed(
-	struct xfs_ag_resv		*ar,
-	struct xfs_perag		*pag)
+	struct xfs_perag		*pag,
+	enum xfs_ag_resv_type		type)
 {
 	xfs_extlen_t			len;
 
-	/* Preserve all allocated blocks except those reserved for AGFL */
-	if (ar == &xfs_ag_agfl_resv) {
-		ASSERT(pag->pag_reserved_blocks >=
-		       pag->pag_agfl_reserved_blocks);
-		len = pag->pag_reserved_blocks - pag->pag_agfl_reserved_blocks;
-		trace_xfs_ag_resv_agfl_needed(pag->pag_mount, pag->pag_agno,
-				-1, -1, len, pag);
-		return len;
+	len = pag->pag_meta_resv.ar_reserved + pag->pag_agfl_resv.ar_reserved;
+	switch (type) {
+	case XFS_AG_RESV_METADATA:
+	case XFS_AG_RESV_AGFL:
+		len -= XFS_AG_RESV(pag, type)->ar_reserved;
+		break;
+	case XFS_AG_RESV_NONE:
+		/* empty */
+		break;
+	default:
+		ASSERT(0);
 	}
 
-	/* Preserve all allocated blocks */
-	if (ar == NULL) {
-		trace_xfs_ag_resv_nores_needed(pag->pag_mount, pag->pag_agno,
-				-2, -2, pag->pag_reserved_blocks, pag);
-		return pag->pag_reserved_blocks;
-	}
+	trace_xfs_ag_resv_needed(pag, type, len);
 
-	/* Preserve all blocks except our reservation */
-	ASSERT(pag->pag_reserved_blocks >= resv_needed(ar));
-	len = pag->pag_reserved_blocks - resv_needed(ar);
-	trace_xfs_ag_resv_needed(ar->ar_mount, ar->ar_agno, ar->ar_blocks,
-			ar->ar_inuse, len, pag);
 	return len;
+}
+
+/* Clean out a reservation */
+static int
+ag_resv_free(
+	struct xfs_perag		*pag,
+	enum xfs_ag_resv_type		type)
+{
+	struct xfs_ag_resv		*resv;
+	struct xfs_ag_resv		t;
+	int				error;
+
+	trace_xfs_ag_resv_free(pag, type, 0);
+
+	resv = XFS_AG_RESV(pag, type);
+	t = *resv;
+	resv->ar_reserved = 0;
+	resv->ar_asked = 0;
+	pag->pag_mount->m_ag_max_usable += t.ar_asked;
+
+	if (type == XFS_AG_RESV_AGFL)
+		error = xfs_mod_fdblocks(pag->pag_mount, t.ar_asked, false);
+	else
+		error = xfs_mod_fdblocks(pag->pag_mount, t.ar_reserved, false);
+	if (error)
+		trace_xfs_ag_resv_free_error(pag->pag_mount, pag->pag_agno,
+				error, _RET_IP_);
+	return error;
 }
 
 /* Free a per-AG reservation. */
 int
 xfs_ag_resv_free(
-	struct xfs_ag_resv		*ar,
 	struct xfs_perag		*pag)
 {
+	int				error = 0;
+	int				err2;
+
+	err2 = ag_resv_free(pag, XFS_AG_RESV_AGFL);
+	if (err2 && !error)
+		error = err2;
+	err2 = ag_resv_free(pag, XFS_AG_RESV_METADATA);
+	if (err2 && !error)
+		error = err2;
+	return error;
+}
+
+static int
+ag_resv_init(
+	struct xfs_perag		*pag,
+	enum xfs_ag_resv_type		type,
+	xfs_extlen_t			ask,
+	xfs_extlen_t			used)
+{
+	struct xfs_mount		*mp = pag->pag_mount;
+	struct xfs_ag_resv		*resv;
 	int				error;
 
-	trace_xfs_ag_resv_free(ar->ar_mount, ar->ar_agno, ar->ar_blocks,
-			ar->ar_inuse, pag);
-	pag->pag_reserved_blocks -= resv_needed(ar);
-	if (ar->ar_flags & XFS_AG_RESV_AGFL)
-		pag->pag_agfl_reserved_blocks -= resv_needed(ar);
-	error = xfs_mod_fdblocks(ar->ar_mount, resv_needed(ar), false);
-	kmem_free(ar);
+	resv = XFS_AG_RESV(pag, type);
+	if (used > ask)
+		ask = used;
+	resv->ar_asked = ask;
+	resv->ar_reserved = ask - used;
+	mp->m_ag_max_usable -= ask;
 
+	trace_xfs_ag_resv_init(pag, type, ask);
+
+	if (type == XFS_AG_RESV_AGFL)
+		error = xfs_mod_fdblocks(mp, -(int64_t)resv->ar_asked, false);
+	else
+		error = xfs_mod_fdblocks(mp, -(int64_t)resv->ar_reserved, false);
 	if (error)
-		trace_xfs_ag_resv_free_error(ar->ar_mount, ar->ar_agno,
+		trace_xfs_ag_resv_init_error(pag->pag_mount, pag->pag_agno,
 				error, _RET_IP_);
+
 	return error;
 }
 
 /* Create a per-AG block reservation. */
 int
 xfs_ag_resv_init(
-	struct xfs_mount		*mp,
-	struct xfs_perag		*pag,
-	xfs_extlen_t			blocks,
-	xfs_extlen_t			inuse,
-	unsigned int			flags,
-	struct xfs_ag_resv		**par)
+	struct xfs_perag		*pag)
 {
-	struct xfs_ag_resv		*ar;
-	int				error;
+	xfs_extlen_t			ask;
+	xfs_extlen_t			used;
+	int				error = 0;
+	int				err2;
 
-	if (blocks < inuse) {
-		mp->m_ag_max_usable -= inuse - blocks;
-		blocks = inuse;
-	}
-	ar = kmem_alloc(sizeof(struct xfs_ag_resv), KM_SLEEP);
-	ar->ar_mount = mp;
-	ar->ar_agno = pag->pag_agno;
-	ar->ar_blocks = blocks;
-	ar->ar_inuse = inuse;
-	ar->ar_flags = flags;
+	if (pag->pag_meta_resv.ar_asked)
+		goto init_agfl;
 
-	pag->pag_reserved_blocks += resv_needed(ar);
-	if (ar->ar_flags & XFS_AG_RESV_AGFL)
-		pag->pag_agfl_reserved_blocks += resv_needed(ar);
-	*par = ar;
+	/* Create the metadata reservation. */
+	ask = used = 0;
 
-	error = xfs_mod_fdblocks(mp, -(int64_t)resv_needed(ar), false);
-	trace_xfs_ag_resv_init(mp, pag->pag_agno, blocks, inuse, pag);
-	if (!error && pag->pag_reserved_blocks > pag->pagf_freeblks)
-		error = -ENOSPC;
+	err2 = xfs_refcountbt_calc_reserves(pag->pag_mount, pag->pag_agno,
+			&ask, &used);
+	if (err2 && !error)
+		error = err2;
 
-	if (error)
-		trace_xfs_ag_resv_init_error(ar->ar_mount, ar->ar_agno,
-				error, _RET_IP_);
+	err2 = ag_resv_init(pag, XFS_AG_RESV_METADATA, ask, used);
+	if (err2 && !error)
+		error = err2;
+
+init_agfl:
+	if (pag->pag_agfl_resv.ar_asked)
+		return error;
+
+	/* Create the AGFL metadata reservation */
+	ask = used = 0;
+
+	err2 = xfs_rmapbt_calc_reserves(pag->pag_mount, pag->pag_agno,
+			&ask, &used);
+	if (err2 && !error)
+		error = err2;
+
+	err2 = ag_resv_init(pag, XFS_AG_RESV_AGFL, ask, used);
+	if (err2 && !error)
+		error = err2;
+
 	return error;
 }
 
 /* Allocate a block from the reservation. */
 void
-xfs_ag_resv_alloc_block(
-	struct xfs_ag_resv		*ar,
-	struct xfs_trans		*tp,
-	struct xfs_perag		*pag)
+xfs_ag_resv_alloc_extent(
+	struct xfs_perag		*pag,
+	enum xfs_ag_resv_type		type,
+	struct xfs_alloc_arg		*args)
 {
-	if (!ar)
-		return;
+	struct xfs_ag_resv		*resv;
+	xfs_extlen_t			leftover;
+	uint				field;
 
-	trace_xfs_ag_resv_alloc_block(ar->ar_mount, ar->ar_agno, ar->ar_blocks,
-			ar->ar_inuse, pag);
-	ar->ar_inuse++;
-	if (ar->ar_inuse <= ar->ar_blocks) {
-		pag->pag_reserved_blocks--;
-		if (ar->ar_flags & XFS_AG_RESV_AGFL)
-			pag->pag_agfl_reserved_blocks--;
-		xfs_trans_mod_sb(tp, XFS_TRANS_SB_FDBLOCKS, 1);
-	} else {
-		ar->ar_blocks++;
-		ar->ar_mount->m_ag_max_usable--;
+	trace_xfs_ag_resv_alloc_extent(pag, type, args->len);
+
+	switch (type) {
+	case XFS_AG_RESV_METADATA:
+	case XFS_AG_RESV_AGFL:
+		resv = XFS_AG_RESV(pag, type);
+		break;
+	default:
+		ASSERT(0);
+		/* fall through */
+	case XFS_AG_RESV_NONE:
+		field = args->wasdel ? XFS_TRANS_SB_RES_FDBLOCKS :
+				       XFS_TRANS_SB_FDBLOCKS;
+		xfs_trans_mod_sb(args->tp, field, -(int64_t)args->len);
+		return;
 	}
+
+	if (args->len > resv->ar_reserved) {
+		leftover = args->len - resv->ar_reserved;
+		if (type != XFS_AG_RESV_AGFL)
+			xfs_trans_mod_sb(args->tp, XFS_TRANS_SB_FDBLOCKS,
+					-(int64_t)leftover);
+		resv->ar_reserved = 0;
+	} else
+		resv->ar_reserved -= args->len;
 }
 
 /* Free a block to the reservation. */
 void
-xfs_ag_resv_free_block(
-	struct xfs_ag_resv		*ar,
+xfs_ag_resv_free_extent(
+	struct xfs_perag		*pag,
+	enum xfs_ag_resv_type		type,
 	struct xfs_trans		*tp,
-	struct xfs_perag		*pag)
+	xfs_extlen_t			len)
 {
-	if (!ar)
-		return;
+	xfs_extlen_t			leftover;
+	struct xfs_ag_resv		*resv;
 
-	trace_xfs_ag_resv_free_block(ar->ar_mount, ar->ar_agno, ar->ar_blocks,
-			ar->ar_inuse, pag);
-	ar->ar_inuse--;
-	pag->pag_reserved_blocks++;
-	if (ar->ar_flags & XFS_AG_RESV_AGFL)
-		pag->pag_agfl_reserved_blocks++;
-	xfs_mod_fdblocks(ar->ar_mount, -1, false);
+	trace_xfs_ag_resv_free_extent(pag, type, len);
+
+	switch (type) {
+	case XFS_AG_RESV_METADATA:
+	case XFS_AG_RESV_AGFL:
+		resv = XFS_AG_RESV(pag, type);
+		break;
+	default:
+		ASSERT(0);
+		/* fall through */
+	case XFS_AG_RESV_NONE:
+		xfs_trans_mod_sb(tp, XFS_TRANS_SB_FDBLOCKS, (int64_t)len);
+		return;
+	}
+
+	if (resv->ar_reserved + len > resv->ar_asked) {
+		leftover = resv->ar_reserved + len - resv->ar_asked;
+		if (type != XFS_AG_RESV_AGFL)
+			xfs_trans_mod_sb(tp, XFS_TRANS_SB_FDBLOCKS,
+					(int64_t)leftover);
+		resv->ar_reserved = resv->ar_asked;
+	} else
+		resv->ar_reserved += len;
 }

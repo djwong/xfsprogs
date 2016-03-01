@@ -131,7 +131,7 @@ xfs_inobt_free_block(
 
 	XFS_RMAP_AG_OWNER(&oinfo, XFS_RMAP_OWN_INOBT);
 	fsbno = XFS_DADDR_TO_FSB(cur->bc_mp, XFS_BUF_ADDR(bp));
-	error = xfs_free_extent(cur->bc_tp, fsbno, 1, &oinfo);
+	error = xfs_free_extent(cur->bc_tp, fsbno, 1, &oinfo, XFS_AG_RESV_NONE);
 	if (error)
 		return error;
 

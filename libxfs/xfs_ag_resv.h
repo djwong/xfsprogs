@@ -16,61 +16,19 @@
  * along with this program; if not, write the Free Software Foundation,
  * Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
-#ifndef __XFS_PERAG_POOL_H__
-#define	__XFS_PERAG_POOL_H__
+#ifndef __XFS_AG_RESV_H__
+#define	__XFS_AG_RESV_H__
 
-/* Free a per-AG reservation type. */
-static inline void
-xfs_ag_resv_type_free(
-	struct xfs_mount		*mp,
-	xfs_extlen_t			blocks)
-{
-	mp->m_ag_max_usable += blocks;
-}
+int xfs_ag_resv_free(struct xfs_perag *pag);
+int xfs_ag_resv_init(struct xfs_perag *pag);
 
-/* Allocate a per-AG reservation type. */
-static inline void
-xfs_ag_resv_type_init(
-	struct xfs_mount		*mp,
-	xfs_extlen_t			blocks)
-{
-	mp->m_ag_max_usable -= blocks;
-}
+bool xfs_ag_resv_critical(struct xfs_perag *pag, enum xfs_ag_resv_type type);
+xfs_extlen_t xfs_ag_resv_needed(struct xfs_perag *pag,
+		enum xfs_ag_resv_type type);
 
-#define XFS_AG_RESV_AGFL	1	/* reservation feeds the agfl */
+void xfs_ag_resv_alloc_extent(struct xfs_perag *pag, enum xfs_ag_resv_type type,
+		struct xfs_alloc_arg *args);
+void xfs_ag_resv_free_extent(struct xfs_perag *pag, enum xfs_ag_resv_type type,
+		struct xfs_trans *tp, xfs_extlen_t len);
 
-struct xfs_ag_resv {
-	struct xfs_mount		*ar_mount;
-	xfs_agnumber_t			ar_agno;
-	/* number of blocks reserved for our client */
-	xfs_extlen_t			ar_blocks;
-	/* number of blocks in use */
-	xfs_extlen_t			ar_inuse;
-	unsigned int			ar_flags;
-};
-
-extern struct xfs_ag_resv	xfs_ag_agfl_resv;
-
-int xfs_ag_resv_free(struct xfs_ag_resv *ar, struct xfs_perag *pag);
-int xfs_ag_resv_init(struct xfs_mount *mp, struct xfs_perag *pag,
-		xfs_extlen_t blocks, xfs_extlen_t inuse, unsigned int flags,
-		struct xfs_ag_resv **par);
-
-xfs_extlen_t xfs_ag_resv_needed(struct xfs_ag_resv *ar,
-		struct xfs_perag *pag);
-
-/* How many blocks have we reserved? */
-static inline xfs_extlen_t xfs_ag_resv_blocks(
-	struct xfs_ag_resv	*ar)
-{
-	return ar->ar_blocks;
-}
-
-void xfs_ag_resv_alloc_block(struct xfs_ag_resv *ar, struct xfs_trans *tp,
-		struct xfs_perag *pag);
-void xfs_ag_resv_free_block(struct xfs_ag_resv *ar, struct xfs_trans *tp,
-		struct xfs_perag *pag);
-
-bool xfs_ag_resv_critical(struct xfs_ag_resv *ar, struct xfs_perag *pag);
-
-#endif	/* __XFS_PERAG_POOL_H__ */
+#endif	/* __XFS_AG_RESV_H__ */
