@@ -4681,7 +4681,7 @@ xfs_btree_overlapped_query_range(
 
 		if (level == 0) {
 			/* End of leaf, pop back towards the root. */
-			if (cur->bc_ptrs[level] == be16_to_cpu(block->bb_numrecs)) {
+			if (cur->bc_ptrs[level] > be16_to_cpu(block->bb_numrecs)) {
 				if (level < cur->bc_nlevels - 1)
 					cur->bc_ptrs[level + 1]++;
 				level++;
@@ -4708,7 +4708,7 @@ xfs_btree_overlapped_query_range(
 		}
 
 		/* End of node, pop back towards the root. */
-		if (cur->bc_ptrs[level] == be16_to_cpu(block->bb_numrecs)) {
+		if (cur->bc_ptrs[level] > be16_to_cpu(block->bb_numrecs)) {
 			if (level < cur->bc_nlevels - 1)
 				cur->bc_ptrs[level + 1]++;
 			level++;
