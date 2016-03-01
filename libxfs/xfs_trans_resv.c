@@ -79,14 +79,14 @@ xfs_allocfree_log_count(
 	struct xfs_mount *mp,
 	uint		num_ops)
 {
-	uint		num_trees = 2;
+	uint		blocks;
 
+	blocks = num_ops * 2 * (2 * mp->m_ag_maxlevels - 1);
 	if (xfs_sb_version_hasrmapbt(&mp->m_sb))
-		num_trees++;
+		blocks += num_ops * (2 * mp->m_rmap_maxlevels - 1);
 	if (xfs_sb_version_hasreflink(&mp->m_sb))
-		num_trees++;
-
-	return num_ops * num_trees * (2 * mp->m_ag_maxlevels - 1);
+		blocks += num_ops * (2 * mp->m_refc_maxlevels - 1);
+	return blocks;
 }
 
 /*
