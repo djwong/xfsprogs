@@ -103,12 +103,17 @@ xfs_refcountbt_update(
 	struct xfs_refcount_irec	*irec)
 {
 	union xfs_btree_rec	rec;
+	int			error;
 
 	trace_xfs_refcountbt_update(cur->bc_mp, cur->bc_private.a.agno, irec);
 	rec.refc.rc_startblock = cpu_to_be32(irec->rc_startblock);
 	rec.refc.rc_blockcount = cpu_to_be32(irec->rc_blockcount);
 	rec.refc.rc_refcount = cpu_to_be32(irec->rc_refcount);
-	return xfs_btree_update(cur, &rec);
+	error = xfs_btree_update(cur, &rec);
+	if (error)
+		trace_xfs_refcountbt_update_error(cur->bc_mp,
+				cur->bc_private.a.agno, error, _RET_IP_);
+	return error;
 }
 
 /*
@@ -122,11 +127,17 @@ xfs_refcountbt_insert(
 	struct xfs_refcount_irec	*irec,
 	int				*i)
 {
+	int				error;
+
 	trace_xfs_refcountbt_insert(cur->bc_mp, cur->bc_private.a.agno, irec);
 	cur->bc_rec.rc.rc_startblock = irec->rc_startblock;
 	cur->bc_rec.rc.rc_blockcount = irec->rc_blockcount;
 	cur->bc_rec.rc.rc_refcount = irec->rc_refcount;
-	return xfs_btree_insert(cur, i);
+	error = xfs_btree_insert(cur, i);
+	if (error)
+		trace_xfs_refcountbt_insert_error(cur->bc_mp,
+				cur->bc_private.a.agno, error, _RET_IP_);
+	return error;
 }
 
 /*
@@ -155,6 +166,9 @@ xfs_refcountbt_delete(
 		return error;
 	error = xfs_refcountbt_lookup_ge(cur, irec.rc_startblock, &found_rec);
 out_error:
+	if (error)
+		trace_xfs_refcountbt_delete_error(cur->bc_mp,
+				cur->bc_private.a.agno, error, _RET_IP_);
 	return error;
 }
 

@@ -91,6 +91,7 @@ xfs_rmap_update(
 	struct xfs_rmap_irec	*irec)
 {
 	union xfs_btree_rec	rec;
+	int			error;
 
 	trace_xfs_rmapbt_update(cur->bc_mp, cur->bc_private.a.agno,
 			irec->rm_startblock, irec->rm_blockcount,
@@ -100,7 +101,11 @@ xfs_rmap_update(
 	rec.rmap.rm_blockcount = cpu_to_be32(xfs_rmap_irec_blockcount_pack(irec));
 	rec.rmap.rm_owner = cpu_to_be64(irec->rm_owner);
 	rec.rmap.rm_offset = cpu_to_be64(xfs_rmap_irec_offset_pack(irec));
-	return xfs_btree_update(cur, &rec);
+	error = xfs_btree_update(cur, &rec);
+	if (error)
+		trace_xfs_rmapbt_update_error(cur->bc_mp,
+				cur->bc_private.a.agno, error, _RET_IP_);
+	return error;
 }
 
 int
@@ -133,6 +138,9 @@ xfs_rmapbt_insert(
 		goto done;
 	XFS_WANT_CORRUPTED_GOTO(rcur->bc_mp, i == 1, done);
 done:
+	if (error)
+		trace_xfs_rmapbt_insert_error(rcur->bc_mp,
+				rcur->bc_private.a.agno, error, _RET_IP_);
 	return error;
 }
 
@@ -161,6 +169,9 @@ xfs_rmapbt_delete(
 		goto done;
 	XFS_WANT_CORRUPTED_GOTO(rcur->bc_mp, i == 1, done);
 done:
+	if (error)
+		trace_xfs_rmapbt_delete_error(rcur->bc_mp,
+				rcur->bc_private.a.agno, error, _RET_IP_);
 	return error;
 }
 
