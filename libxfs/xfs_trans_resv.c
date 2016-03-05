@@ -85,7 +85,7 @@ xfs_allocfree_log_count(
 	if (xfs_sb_version_hasrmapbt(&mp->m_sb))
 		blocks += num_ops * (2 * mp->m_rmap_maxlevels - 1);
 	if (xfs_sb_version_hasreflink(&mp->m_sb))
-		blocks += num_ops * (2 * mp->m_refc_maxlevels - 1);
+		blocks += 2 * num_ops * (2 * mp->m_refc_maxlevels - 1);
 	return blocks;
 }
 
