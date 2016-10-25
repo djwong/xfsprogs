@@ -169,3 +169,9 @@ extern void		readdir_init(void);
 #endif
 
 extern void		reflink_init(void);
+
+#ifdef HAVE_FSXATTR_COWEXTSIZE
+extern void		cowextsize_init(void);
+#else
+#define cowextsize_init()	do { } while (0)
+#endif

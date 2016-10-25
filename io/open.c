@@ -125,6 +125,9 @@ stat_f(
 		printxattr(fsx.fsx_xflags, verbose, 0, file->name, 1, 1);
 		printf(_("fsxattr.projid = %u\n"), fsx.fsx_projid);
 		printf(_("fsxattr.extsize = %u\n"), fsx.fsx_extsize);
+#if defined HAVE_FSXATTR_COWEXTSIZE
+		printf(_("fsxattr.cowextsize = %u\n"), fsx.fsx_cowextsize);
+#endif
 		printf(_("fsxattr.nextents = %u\n"), fsx.fsx_nextents);
 		printf(_("fsxattr.naextents = %u\n"), fsxa.fsx_nextents);
 	}
