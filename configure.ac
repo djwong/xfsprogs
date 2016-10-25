@@ -61,6 +61,11 @@ AC_ARG_ENABLE(librt,
 	enable_librt=yes)
 AC_SUBST(enable_librt)
 
+AC_ARG_ENABLE(internal-fsxattr,
+[ --enable-internal-fsxattr=[yes/no] Override system definition of struct fsxattr [default=no]],,
+	enable_internal_fsxattr=no)
+AC_SUBST(enable_internal_fsxattr)
+
 #
 # If the user specified a libdir ending in lib64 do not append another
 # 64 to the library names.
