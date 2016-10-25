@@ -109,6 +109,7 @@ HAVE_MNTENT = @have_mntent@
 HAVE_FLS = @have_fls@
 HAVE_FSETXATTR = @have_fsetxattr@
 HAVE_MREMAP = @have_mremap@
+HAVE_FSXATTR_COWEXTSIZE = @have_fsxattr_cowextsize@
 ENABLE_INTERNAL_FSXATTR = @enable_internal_fsxattr@
 
 GCCFLAGS = -funsigned-char -fno-strict-aliasing -Wall
@@ -148,6 +149,9 @@ PCFLAGS+= -DHAVE_FSETXATTR
 endif
 ifeq ($(ENABLE_BLKID),yes)
 PCFLAGS+= -DENABLE_BLKID
+endif
+ifeq ($(HAVE_FSXATTR_COWEXTSIZE),yes)
+PCFLAGS+= -DHAVE_FSXATTR_COWEXTSIZE
 endif
 ifeq ($(ENABLE_INTERNAL_FSXATTR),yes)
 PCFLAGS+= -DOVERRIDE_SYSTEM_FSXATTR

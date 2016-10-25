@@ -265,3 +265,29 @@ AC_DEFUN([AC_HAVE_MREMAP],
        )
     AC_SUBST(have_mremap)
   ])
+
+#
+# Check if we have a struct fsxattr with a fsx_cowextsize field.
+# If linux/fs.h has a struct with that field, then we're ok.
+# If we can't find fsxattr in linux/fs.h at all, the internal
+# definitions provide it, and we're ok.
+#
+# The only way we won't have this is if the kernel headers don't
+# have the field.
+#
+AC_DEFUN([AC_HAVE_FSXATTR_COWEXTSIZE],
+  [ AM_CONDITIONAL([INTERNAL_FSXATTR], [test "x$enable_internal_fsxattr" = xyes])
+    AM_COND_IF([INTERNAL_FSXATTR],
+    [have_fsxattr_cowextsize=yes],
+    [ AC_CHECK_TYPE(struct fsxattr,
+	  [AC_CHECK_MEMBER(struct fsxattr.fsx_cowextsize,
+		  have_fsxattr_cowextsize=yes,
+		  have_fsxattr_cowextsize=no,
+		  [#include <linux/fs.h>]
+          )],
+	  have_fsxattr_cowextsize=yes,
+	  [#include <linux/fs.h>]
+      )
+    ])
+    AC_SUBST(have_fsxattr_cowextsize)
+  ])

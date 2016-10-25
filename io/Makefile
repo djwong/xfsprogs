@@ -99,6 +99,11 @@ ifeq ($(HAVE_MREMAP),yes)
 LCFLAGS += -DHAVE_MREMAP
 endif
 
+ifeq ($(HAVE_FSXATTR_COWEXTSIZE),yes)
+CFILES += cowextsize.c
+# -DHAVE_FSXATTR_COWEXTSIZE already set in PCFLAGS
+endif
+
 default: depend $(LTCOMMAND)
 
 include $(BUILDRULES)
