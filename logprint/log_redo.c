@@ -526,3 +526,152 @@ xlog_recover_print_cud(
 	f = item->ri_buf[0].i_addr;
 	xlog_print_trans_cud(&f, sizeof(struct xfs_cud_log_format));
 }
+
+/* Block Mapping Update Items */
+
+static int
+xfs_bui_copy_format(
+	char			  *buf,
+	uint			  len,
+	struct xfs_bui_log_format *dst_fmt,
+	int			  continued)
+{
+	uint nextents = ((struct xfs_bui_log_format *)buf)->bui_nextents;
+	uint dst_len = xfs_bui_log_format_sizeof(nextents);
+
+	if (len == dst_len || continued) {
+		memcpy((char *)dst_fmt, buf, len);
+		return 0;
+	}
+	fprintf(stderr, _("%s: bad size of BUI format: %u; expected %u; nextents = %u\n"),
+		progname, len, dst_len, nextents);
+	return 1;
+}
+
+int
+xlog_print_trans_bui(
+	char			**ptr,
+	uint			src_len,
+	int			continued)
+{
+	struct xfs_bui_log_format	*src_f, *f = NULL;
+	uint			dst_len;
+	uint			nextents;
+	struct xfs_map_extent	*ex;
+	int			i;
+	int			error = 0;
+	int			core_size;
+
+	core_size = offsetof(struct xfs_bui_log_format, bui_extents);
+
+	/*
+	 * memmove to ensure 8-byte alignment for the long longs in
+	 * struct xfs_bui_log_format structure
+	 */
+	src_f = malloc(src_len);
+	if (src_f == NULL) {
+		fprintf(stderr, _("%s: %s: malloc failed\n"),
+			progname, __func__);
+		exit(1);
+	}
+	memmove((char*)src_f, *ptr, src_len);
+	*ptr += src_len;
+
+	/* convert to native format */
+	nextents = src_f->bui_nextents;
+	dst_len = xfs_bui_log_format_sizeof(nextents);
+
+	if (continued && src_len < core_size) {
+		printf(_("BUI: Not enough data to decode further\n"));
+		error = 1;
+		goto error;
+	}
+
+	f = malloc(dst_len);
+	if (f == NULL) {
+		fprintf(stderr, _("%s: %s: malloc failed\n"),
+			progname, __func__);
+		exit(1);
+	}
+	if (xfs_bui_copy_format((char *)src_f, src_len, f, continued)) {
+		error = 1;
+		goto error;
+	}
+
+	printf(_("BUI:  #regs: %d	num_extents: %d  id: 0x%llx\n"),
+		f->bui_size, f->bui_nextents, (unsigned long long)f->bui_id);
+
+	if (continued) {
+		printf(_("BUI extent data skipped (CONTINUE set, no space)\n"));
+		goto error;
+	}
+
+	ex = f->bui_extents;
+	for (i=0; i < f->bui_nextents; i++) {
+		printf("(s: 0x%llx, l: %d, own: %lld, off: %llu, f: 0x%x) ",
+			(unsigned long long)ex->me_startblock, ex->me_len,
+			(long long)ex->me_owner,
+			(unsigned long long)ex->me_startoff, ex->me_flags);
+		printf("\n");
+		ex++;
+	}
+error:
+	free(src_f);
+	free(f);
+	return error;
+}
+
+void
+xlog_recover_print_bui(
+	struct xlog_recover_item	*item)
+{
+	char				*src_f;
+	uint				src_len;
+
+	src_f = item->ri_buf[0].i_addr;
+	src_len = item->ri_buf[0].i_len;
+
+	xlog_print_trans_bui(&src_f, src_len, 0);
+}
+
+int
+xlog_print_trans_bud(
+	char				**ptr,
+	uint				len)
+{
+	struct xfs_bud_log_format	*f;
+	struct xfs_bud_log_format	lbuf;
+
+	/* size without extents at end */
+	uint core_size = sizeof(struct xfs_bud_log_format);
+
+	/*
+	 * memmove to ensure 8-byte alignment for the long longs in
+	 * xfs_efd_log_format_t structure
+	 */
+	memmove(&lbuf, *ptr, MIN(core_size, len));
+	f = &lbuf;
+	*ptr += len;
+	if (len >= core_size) {
+		printf(_("BUD:  #regs: %d	                 id: 0x%llx\n"),
+			f->bud_size,
+			(unsigned long long)f->bud_bui_id);
+
+		/* don't print extents as they are not used */
+
+		return 0;
+	} else {
+		printf(_("BUD: Not enough data to decode further\n"));
+		return 1;
+	}
+}
+
+void
+xlog_recover_print_bud(
+	struct xlog_recover_item	*item)
+{
+	char				*f;
+
+	f = item->ri_buf[0].i_addr;
+	xlog_print_trans_bud(&f, sizeof(struct xfs_bud_log_format));
+}
