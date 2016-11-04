@@ -259,6 +259,13 @@ xfs_mount_validate_sb(
 		return -EFSCORRUPTED;
 	}
 
+	if (xfs_sb_version_hascrc(&mp->m_sb) &&
+	    unlikely(
+	    sbp->sb_blocksize < XFS_MIN_CRC_BLOCKSIZE)) {
+		xfs_notice(mp, "v5 SB sanity check failed");
+		return -EFSCORRUPTED;
+	}
+
 	/*
 	 * Currently only very few inode sizes are supported.
 	 */
