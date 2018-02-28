@@ -730,6 +730,24 @@ cmn_err(int level, char *fmt, ...)
  * values, and omit the stack trace unless the error level is tuned high.
  */
 void
+xfs_buf_verifier_error(
+	struct xfs_buf		*bp,
+	int			error,
+	const char		*name,
+	void			*buf,
+	size_t			bufsize,
+	xfs_failaddr_t		failaddr)
+{
+
+	xfs_buf_ioerror(bp, error);
+
+	xfs_alert(NULL, "Metadata %s detected at %p, %s block 0x%llx %s",
+		  bp->b_error == -EFSBADCRC ? "CRC error" : "corruption",
+		  failaddr ? failaddr : __return_address,
+		  bp->b_ops->name, bp->b_bn, name);
+}
+
+void
 xfs_verifier_error(
 	struct xfs_buf		*bp,
 	int			error,
