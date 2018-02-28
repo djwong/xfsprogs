@@ -71,4 +71,6 @@ extern void rmap_store_agflcount(struct xfs_mount *, xfs_agnumber_t, int);
 	for ((agno) = NULLAGNUMBER; (agno) == NULLAGNUMBER || \
 	(agno) < (mp)->m_sb.sb_agcount; (agno)++)
 
+extern int rmap_populate_realtime_rmapbt(struct xfs_mount *mp);
+
 #endif /* RMAP_H_ */

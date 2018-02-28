@@ -29,6 +29,8 @@
 #include "dinode.h"
 #include "progress.h"
 #include "versions.h"
+#include "slab.h"
+#include "rmap.h"
 
 static struct cred		zerocr;
 static struct fsxattr 		zerofsx;
@@ -880,6 +882,61 @@ mk_rsumino(xfs_mount_t *mp)
 	_("allocation of the realtime summary ino failed, error = %d\n"),
 			error);
 	}
+	libxfs_trans_commit(tp);
+	IRELE(ip);
+}
+
+static void
+mk_rrmapino(
+	struct xfs_mount	*mp)
+{
+	struct xfs_trans	*tp;
+	struct xfs_inode	*ip;
+	struct cred		creds = {0};
+	struct fsxattr		fsxattrs = {0};
+	struct xfs_btree_block	*block;
+	int			error;
+
+	if (!xfs_sb_version_hasrmapbt(&mp->m_sb) || mp->m_sb.sb_rblocks == 0)
+		return;
+
+	error = -libxfs_trans_alloc(mp, &M_RES(mp)->tr_ichange, 0, 0, 0, &tp);
+	if (error)
+		res_failed(error);
+
+	if (mp->m_sb.sb_rrmapino == 0 ||
+	    mp->m_sb.sb_rrmapino == NULLFSINO ||
+	    need_rrmapino) {
+		/* Allocate a new inode. */
+		error = -libxfs_inode_alloc(&tp, NULL, S_IFREG, 1, 0,
+				&creds, &fsxattrs, &ip);
+		if (error) {
+			do_error(_("Realtime rmap inode allocation failed -- error %d"),
+				 error);
+		}
+		mp->m_sb.sb_rrmapino = ip->i_ino;
+		ip->i_df.if_broot_bytes = XFS_RTRMAP_BROOT_SPACE_CALC(0, 0);
+		ip->i_df.if_broot = kmem_alloc(ip->i_df.if_broot_bytes,
+				KM_SLEEP | KM_NOFS);
+	} else {
+		/* Grab the existing inode. */
+		error = -libxfs_trans_iget(mp, tp, mp->m_sb.sb_rrmapino,
+				0, 0, &ip);
+		if (error)
+			do_error(_("Could not iget realtime rmapbt inode -- error %d"),
+				error);
+	}
+
+	/* Reset the btree root. */
+	ip->i_d.di_size = 0;
+	ip->i_d.di_nblocks = 0;
+	ip->i_d.di_format = XFS_DINODE_FMT_RMAP;
+	block = ip->i_df.if_broot;
+	block->bb_numrecs = cpu_to_be16(0);
+	block->bb_level = cpu_to_be16(0);
+
+	libxfs_trans_log_inode(tp, ip, XFS_ILOG_CORE | XFS_ILOG_DBROOT);
+	libxfs_log_sb(tp);
 	libxfs_trans_commit(tp);
 	IRELE(ip);
 }
@@ -3314,6 +3371,18 @@ phase6(xfs_mount_t *mp)
 		}
 	}
 
+	/*
+	 * We always reinitialize the rrmapbt inode, but if it was bad we
+	 * ought to say something.
+	 */
+	if (no_modify) {
+		if (need_rrmapino)
+			do_warn(_("would reinitialize realtime rmap btree\n"));
+	} else {
+		need_rrmapino = 0;
+		mk_rrmapino(mp);
+	}
+
 	if (!no_modify)  {
 		do_log(
 _("        - resetting contents of realtime bitmap and summary inodes\n"));
@@ -3326,6 +3395,10 @@ _("        - resetting contents of realtime bitmap and summary inodes\n"));
 			do_warn(
 			_("Warning:  realtime bitmap may be inconsistent\n"));
 		}
+
+		if (rmap_populate_realtime_rmapbt(mp))
+			do_warn(
+			_("Warning:  realtime rmapbt may be inconsistent\n"));
 	}
 
 	mark_standalone_inodes(mp);

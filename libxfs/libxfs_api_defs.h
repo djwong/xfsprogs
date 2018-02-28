@@ -159,5 +159,6 @@
 #define xfs_imap_to_bp			libxfs_imap_to_bp
 #define xfs_rtrmapbt_maxrecs		libxfs_rtrmapbt_maxrecs
 #define xfs_rtrmapbt_init_cursor	libxfs_rtrmapbt_init_cursor
+#define xfs_rmap_map_extent		libxfs_rmap_map_extent
 
 #endif /* __LIBXFS_API_DEFS_H__ */

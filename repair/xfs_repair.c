@@ -956,11 +956,14 @@ main(int argc, char **argv)
 	/*
 	 * Done with the block usage maps, toss them...
 	 */
-	rmaps_free(mp);
+	if (mp->m_sb.sb_rblocks == 0)
+		rmaps_free(mp);
 	free_bmaps(mp);
 
 	if (!bad_ino_btree)  {
 		phase6(mp);
+		if (mp->m_sb.sb_rblocks != 0)
+			rmaps_free(mp);
 		timestamp(PHASE_END, 6, NULL);
 
 		phase7(mp, phase2_threads);
