@@ -611,14 +611,18 @@ __xfs_scrub_test(
 	bool				repair)
 {
 	struct xfs_scrub_metadata	meta = {0};
+	struct xfs_error_injection	inject;
 	static bool			injected;
 	int				error;
 
 	if (debug_tweak_on("XFS_SCRUB_NO_KERNEL"))
 		return false;
 	if (debug_tweak_on("XFS_SCRUB_FORCE_REPAIR") && !injected) {
-		str_info(ctx, "XFS_SCRUB_FORCE_REPAIR", "Not supported.");
-		return false;
+		inject.fd = ctx->mnt_fd;
+		inject.errtag = XFS_ERRTAG_FORCE_SCRUB_REPAIR;
+		error = ioctl(ctx->mnt_fd, XFS_IOC_ERROR_INJECTION, &inject);
+		if (error == 0)
+			injected = true;
 	}
 
 	meta.sm_type = type;
