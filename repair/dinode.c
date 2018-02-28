@@ -596,6 +596,7 @@ process_bmbt_reclist_int(
 	xfs_agblock_t		ebno;
 	xfs_extlen_t		blen;
 	xfs_agnumber_t		locked_agno = -1;
+	struct aglock		*ag_lock;
 	int			error = 1;
 
 	if (type == XR_INO_RTDATA)
@@ -641,8 +642,20 @@ _("zero length extent (off = %" PRIu64 ", fsbno = %" PRIu64 ") in ino %" PRIu64 
 			 */
 			if (process_rt_rec(mp, &irec, ino, tot, check_dups))
 				return 1;
+			/* collect reverse mappings for realtime files */
+			if (collect_rmaps && !check_dups) {
+				ag_lock = &ag_locks[(signed)NULLAGNUMBER];
+				pthread_mutex_lock(&ag_lock->lock);
+				error = rmap_add_rec(mp, ino, whichfork,
+						&irec, true);
+				pthread_mutex_unlock(&ag_lock->lock);
+				if (error)
+					do_error(
+_("couldn't add reverse mapping\n")
+						);
+			}
 			/*
-			 * skip rest of loop processing since that'irec.br_startblock
+			 * skip rest of loop processing since that's
 			 * all for regular file forks and attr forks
 			 */
 			continue;
