@@ -4,7 +4,7 @@
 #
 
 OPTS=""
-USAGE="Usage: xfs_info [-V] [-t mtab] mountpoint"
+USAGE="Usage: xfs_info [-V] [-t mtab] [mountpoint|device|file]"
 
 while getopts "t:V" c
 do
@@ -22,8 +22,14 @@ done
 set -- extra "$@"
 shift $OPTIND
 case $# in
-	1)	xfs_spaceman -p xfs_info -c "info" $OPTS "$1"
-		status=$?
+	1)
+		if [ -b "$1" ] || [ -f "$1" ]; then
+			xfs_db -p xfs_info -c "info" $OPTS "$1"
+			status=$?
+		else
+			xfs_spaceman -p xfs_info -c "info" $OPTS "$1"
+			status=$?
+		fi
 		;;
 	*)	echo $USAGE 1>&2
 		exit 2
