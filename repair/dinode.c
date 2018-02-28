@@ -1909,20 +1909,22 @@ _("nblocks (%" PRIu64 ") smaller than nextents for inode %" PRIu64 "\n"), nblock
  */
 static int
 process_inode_data_fork(
-	xfs_mount_t	*mp,
-	xfs_agnumber_t	agno,
-	xfs_agino_t	ino,
-	xfs_dinode_t	*dino,
-	int		type,
-	int		*dirty,
-	xfs_rfsblock_t	*totblocks,
-	uint64_t	*nextents,
-	blkmap_t	**dblkmap,
-	int		check_dups)
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno,
+	xfs_agino_t		ino,
+	struct xfs_dinode	**dinop,
+	int			type,
+	int			*dirty,
+	xfs_rfsblock_t		*totblocks,
+	uint64_t		*nextents,
+	blkmap_t		**dblkmap,
+	int			check_dups,
+	struct xfs_buf		**ino_bpp)
 {
-	xfs_ino_t	lino = XFS_AGINO_TO_INO(mp, agno, ino);
-	int		err = 0;
-	int		nex;
+	struct xfs_dinode	*dino = *dinop;
+	xfs_ino_t		lino = XFS_AGINO_TO_INO(mp, agno, ino);
+	int			err = 0;
+	int			nex;
 
 	/*
 	 * extent count on disk is only valid for positive values. The kernel
@@ -2018,22 +2020,24 @@ process_inode_data_fork(
  */
 static int
 process_inode_attr_fork(
-	xfs_mount_t	*mp,
-	xfs_agnumber_t	agno,
-	xfs_agino_t	ino,
-	xfs_dinode_t	*dino,
-	int		type,
-	int		*dirty,
-	xfs_rfsblock_t	*atotblocks,
-	uint64_t	*anextents,
-	int		check_dups,
-	int		extra_attr_check,
-	int		*retval)
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno,
+	xfs_agino_t		ino,
+	struct xfs_dinode	**dinop,
+	int			type,
+	int			*dirty,
+	xfs_rfsblock_t		*atotblocks,
+	uint64_t		*anextents,
+	int			check_dups,
+	int			extra_attr_check,
+	int			*retval,
+	struct xfs_buf		**ino_bpp)
 {
-	xfs_ino_t	lino = XFS_AGINO_TO_INO(mp, agno, ino);
-	blkmap_t	*ablkmap = NULL;
-	int		repair = 0;
-	int		err;
+	xfs_ino_t		lino = XFS_AGINO_TO_INO(mp, agno, ino);
+	struct xfs_dinode	*dino = *dinop;
+	struct blkmap		*ablkmap = NULL;
+	int			repair = 0;
+	int			err;
 
 	if (!XFS_DFORK_Q(dino)) {
 		*anextents = 0;
@@ -2090,7 +2094,7 @@ process_inode_attr_fork(
 		 * XXX - put the inode onto the "move it" list and
 		 *	log the the attribute scrubbing
 		 */
-		do_warn(_("bad attribute fork in inode %" PRIu64), lino);
+		do_warn(_("bad attribute fork in inode %" PRIu64 "\n"), lino);
 
 		if (!no_modify)  {
 			if (delete_attr_ok)  {
@@ -2215,21 +2219,22 @@ _("would clear obsolete nlink field in version 2 inode %" PRIu64 ", currently %d
  * for detailed, info, look at process_dinode() comments.
  */
 static int
-process_dinode_int(xfs_mount_t *mp,
-		xfs_dinode_t *dino,
-		xfs_agnumber_t agno,
-		xfs_agino_t ino,
-		int was_free,		/* 1 if inode is currently free */
-		int *dirty,		/* out == > 0 if inode is now dirty */
-		int *used,		/* out == 1 if inode is in use */
-		int verify_mode,	/* 1 == verify but don't modify inode */
-		int uncertain,		/* 1 == inode is uncertain */
-		int ino_discovery,	/* 1 == check dirs for unknown inodes */
-		int check_dups,		/* 1 == check if inode claims
-					 * duplicate blocks		*/
-		int extra_attr_check, /* 1 == do attribute format and value checks */
-		int *isa_dir,		/* out == 1 if inode is a directory */
-		xfs_ino_t *parent)	/* out -- parent if ino is a dir */
+process_dinode_int(
+	struct xfs_mount	*mp,
+	struct xfs_dinode	**dinop,
+	xfs_agnumber_t		agno,
+	xfs_agino_t		ino,
+	int			was_free,	/* 1 if inode is currently free */
+	int			*dirty,		/* out == > 0 if inode is now dirty */
+	int			*used,		/* out == 1 if inode is in use */
+	int			verify_mode,	/* 1 == verify but don't modify inode */
+	int			uncertain,	/* 1 == inode is uncertain */
+	int			ino_discovery,	/* 1 == check dirs for unknown inodes */
+	int			check_dups,	/* 1 == check if inode claims duplicate blocks */
+	int			extra_attr_check, /* 1 == do attribute format and value checks */
+	int			*isa_dir,	/* out == 1 if inode is a directory */
+	xfs_ino_t		*parent,	/* out -- parent if ino is a dir */
+	struct xfs_buf		**ino_bpp)
 {
 	xfs_rfsblock_t		totblocks = 0;
 	xfs_rfsblock_t		atotblocks = 0;
@@ -2241,7 +2246,8 @@ process_dinode_int(xfs_mount_t *mp,
 	xfs_ino_t		lino;
 	const int		is_free = 0;
 	const int		is_used = 1;
-	blkmap_t		*dblkmap = NULL;
+	struct blkmap		*dblkmap = NULL;
+	struct xfs_dinode	*dino = *dinop;
 
 	*dirty = *isa_dir = 0;
 	*used = is_used;
@@ -2263,6 +2269,7 @@ process_dinode_int(xfs_mount_t *mp,
 	 * If uncertain is set, verify_mode MUST be set.
 	 */
 	ASSERT(uncertain == 0 || verify_mode != 0);
+	ASSERT(ino_bpp != NULL || verify_mode != 0);
 
 	/*
 	 * This is the only valid point to check the CRC; after this we may have
@@ -2742,18 +2749,21 @@ _("Cannot have CoW extent size of zero on cowextsize inode %" PRIu64 ", "),
 	/*
 	 * check data fork -- if it's bad, clear the inode
 	 */
-	if (process_inode_data_fork(mp, agno, ino, dino, type, dirty,
-			&totblocks, &nextents, &dblkmap, check_dups) != 0)
+	if (process_inode_data_fork(mp, agno, ino, dinop, type, dirty,
+			&totblocks, &nextents, &dblkmap, check_dups,
+			ino_bpp) != 0)
 		goto bad_out;
+	dino = *dinop;
 
 	/*
 	 * check attribute fork if necessary.  attributes are
 	 * always stored in the regular filesystem.
 	 */
-	if (process_inode_attr_fork(mp, agno, ino, dino, type, dirty,
+	if (process_inode_attr_fork(mp, agno, ino, dinop, type, dirty,
 			&atotblocks, &anextents, check_dups, extra_attr_check,
-			&retval))
+			&retval, ino_bpp))
 		goto bad_out;
+	dino = *dinop;
 
 	/*
 	 * enforce totblocks is 0 for misc types
@@ -2862,28 +2872,30 @@ bad_out:
 
 int
 process_dinode(
-	xfs_mount_t	*mp,
-	xfs_dinode_t	*dino,
-	xfs_agnumber_t	agno,
-	xfs_agino_t	ino,
-	int		was_free,
-	int		*dirty,
-	int		*used,
-	int		ino_discovery,
-	int		check_dups,
-	int		extra_attr_check,
-	int		*isa_dir,
-	xfs_ino_t	*parent)
+	struct xfs_mount	*mp,
+	struct xfs_dinode	**dinop,
+	xfs_agnumber_t		agno,
+	xfs_agino_t		ino,
+	int			was_free,
+	int			*dirty,
+	int			*used,
+	int			ino_discovery,
+	int			check_dups,
+	int			extra_attr_check,
+	int			*isa_dir,
+	xfs_ino_t		*parent,
+	struct xfs_buf		**ino_bpp)
 {
-	const int	verify_mode = 0;
-	const int	uncertain = 0;
+	const int		verify_mode = 0;
+	const int		uncertain = 0;
 
 #ifdef XR_INODE_TRACE
 	fprintf(stderr, _("processing inode %d/%d\n"), agno, ino);
 #endif
-	return process_dinode_int(mp, dino, agno, ino, was_free, dirty, used,
-				verify_mode, uncertain, ino_discovery,
-				check_dups, extra_attr_check, isa_dir, parent);
+	return process_dinode_int(mp, dinop, agno, ino, was_free, dirty, used,
+			verify_mode, uncertain, ino_discovery,
+			check_dups, extra_attr_check, isa_dir, parent,
+			ino_bpp);
 }
 
 /*
@@ -2908,9 +2920,9 @@ verify_dinode(
 	const int	ino_discovery = 0;
 	const int	uncertain = 0;
 
-	return process_dinode_int(mp, dino, agno, ino, 0, &dirty, &used,
-				verify_mode, uncertain, ino_discovery,
-				check_dups, 0, &isa_dir, &parent);
+	return process_dinode_int(mp, &dino, agno, ino, 0, &dirty, &used,
+			verify_mode, uncertain, ino_discovery,
+			check_dups, 0, &isa_dir, &parent, NULL);
 }
 
 /*
@@ -2934,7 +2946,7 @@ verify_uncertain_dinode(
 	const int	ino_discovery = 0;
 	const int	uncertain = 1;
 
-	return process_dinode_int(mp, dino, agno, ino, 0, &dirty, &used,
+	return process_dinode_int(mp, &dino, agno, ino, 0, &dirty, &used,
 				verify_mode, uncertain, ino_discovery,
-				check_dups, 0, &isa_dir, &parent);
+				check_dups, 0, &isa_dir, &parent, NULL);
 }
