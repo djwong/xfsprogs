@@ -136,6 +136,7 @@ init_commands(void)
 	fsmap_init();
 	help_init();
 	hash_init();
+	info_init();
 	inode_init();
 	input_init();
 	logres_init();
