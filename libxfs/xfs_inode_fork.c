@@ -33,6 +33,7 @@
 #include "xfs_dir2_priv.h"
 #include "xfs_attr_leaf.h"
 #include "xfs_shared.h"
+#include "xfs_rtrmap_btree.h"
 
 
 kmem_zone_t *xfs_ifork_zone;
@@ -40,6 +41,7 @@ kmem_zone_t *xfs_ifork_zone;
 STATIC int xfs_iformat_local(xfs_inode_t *, xfs_dinode_t *, int, int);
 STATIC int xfs_iformat_extents(xfs_inode_t *, xfs_dinode_t *, int);
 STATIC int xfs_iformat_btree(xfs_inode_t *, xfs_dinode_t *, int);
+STATIC int xfs_iformat_rmap(struct xfs_inode *ip, struct xfs_dinode *dip);
 
 /*
  * Copy inode type and data and attr format specific information from the
@@ -90,7 +92,7 @@ xfs_iformat_fork(
 				return -EFSCORRUPTED;
 			if (ip->i_ino != ip->i_mount->m_sb.sb_rrmapino)
 				return -EFSCORRUPTED;
-			/* to be implemented later */
+			error = xfs_iformat_rmap(ip, dip);
 			break;
 		default:
 			return -EFSCORRUPTED;
@@ -340,6 +342,37 @@ xfs_iformat_btree(
 	return 0;
 }
 
+/* The file is a reverse mapping tree. */
+STATIC int
+xfs_iformat_rmap(
+	struct xfs_inode	*ip,
+	struct xfs_dinode	*dip)
+{
+	struct xfs_rtrmap_root	*dfp;
+	struct xfs_ifork	*ifp;
+	/* REFERENCED */
+	int			size;
+	int			whichfork = XFS_DATA_FORK;
+
+	ifp = XFS_IFORK_PTR(ip, whichfork);
+	dfp = (struct xfs_rtrmap_root *)XFS_DFORK_PTR(dip, whichfork);
+	size = XFS_RTRMAP_BROOT_SPACE(dfp);
+
+	ifp->if_broot_bytes = size;
+	ifp->if_broot = kmem_alloc(size, KM_SLEEP | KM_NOFS);
+	ASSERT(ifp->if_broot != NULL);
+	/*
+	 * Copy and convert from the on-disk structure
+	 * to the in-memory structure.
+	 */
+	xfs_rtrmapbt_from_disk(ip, dfp,
+			XFS_DFORK_SIZE(dip, ip->i_mount, whichfork),
+			ifp->if_broot, size);
+	ifp->if_flags = XFS_IFBROOT;
+
+	return 0;
+}
+
 /*
  * This is called when the amount of space needed for if_data
  * is increased or decreased.  The change in size is indicated by
@@ -570,7 +603,18 @@ xfs_iflush_fork(
 		break;
 
 	case XFS_DINODE_FMT_RMAP:
-		/* to be implemented later */
+		ASSERT(whichfork == XFS_DATA_FORK);
+		ASSERT(ip->i_ino == mp->m_sb.sb_rrmapino);
+		if ((iip->ili_fields & brootflag[whichfork]) &&
+		    (ifp->if_broot_bytes > 0)) {
+			ASSERT(ifp->if_broot != NULL);
+			ASSERT(XFS_RTRMAP_ROOT_SPACE(ifp->if_broot) <=
+				XFS_IFORK_SIZE(ip, whichfork));
+			xfs_rtrmapbt_to_disk(mp, ifp->if_broot,
+				ifp->if_broot_bytes,
+				(struct xfs_rtrmap_root *)cp,
+				XFS_DFORK_SIZE(dip, mp, whichfork));
+		}
 		break;
 
 	default:
