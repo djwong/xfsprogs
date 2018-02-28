@@ -66,6 +66,7 @@ static const struct scrub_descr scrubbers[XFS_SCRUB_TYPE_NR] = {
 	[XFS_SCRUB_TYPE_UQUOTA]		= {"usrquota",		ST_FS},
 	[XFS_SCRUB_TYPE_GQUOTA]		= {"grpquota",		ST_FS},
 	[XFS_SCRUB_TYPE_PQUOTA]		= {"prjquota",		ST_FS},
+	[XFS_SCRUB_TYPE_RTRMAPBT]	= {"rtrmapbt",		ST_FS},
 };
 
 static void
