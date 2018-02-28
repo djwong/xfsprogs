@@ -270,7 +270,10 @@ secondary_sb_whack(
 	 *
 	 * size is the size of data which is valid for this sb.
 	 */
-	if (xfs_sb_version_hasmetauuid(sb))
+	if (xfs_sb_version_hasrmapbt(sb) && mp->m_sb.sb_rblocks > 0)
+		size = offsetof(struct xfs_sb, sb_rrmapino)
+			+ sizeof(sb->sb_rrmapino);
+	else if (xfs_sb_version_hasmetauuid(sb))
 		size = offsetof(xfs_sb_t, sb_meta_uuid)
 			+ sizeof(sb->sb_meta_uuid);
 	else if (xfs_sb_version_hascrc(sb))
