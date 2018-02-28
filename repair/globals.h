@@ -119,6 +119,7 @@ EXTERN int		need_root_dotdot;
 
 EXTERN int		need_rbmino;
 EXTERN int		need_rsumino;
+EXTERN int		need_rrmapino;
 
 EXTERN int		lost_quotas;
 EXTERN int		have_uquotino;

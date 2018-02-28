@@ -229,6 +229,7 @@ int		count_bcnt_extents(xfs_agnumber_t);
 #define XR_INO_SOCK	9		/* socket */
 #define XR_INO_FIFO	10		/* fifo */
 #define XR_INO_MOUNTPOINT 11		/* mountpoint */
+#define XR_INO_RTRMAP	12		/* realtime rmap */
 
 /* inode allocation tree */
 

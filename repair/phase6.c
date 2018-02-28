@@ -3140,6 +3140,19 @@ mark_standalone_inodes(xfs_mount_t *mp)
 			add_inode_reached(irec, offset);
 		}
 	}
+
+	if (xfs_sb_version_hasrmapbt(&mp->m_sb) && mp->m_sb.sb_rblocks > 0) {
+		irec = find_inode_rec(mp,
+				XFS_INO_TO_AGNO(mp, mp->m_sb.sb_rrmapino),
+				XFS_INO_TO_AGINO(mp, mp->m_sb.sb_rrmapino));
+
+		offset = XFS_INO_TO_AGINO(mp, mp->m_sb.sb_rrmapino) -
+				irec->ino_startnum;
+
+		ASSERT(irec != NULL);
+
+		add_inode_reached(irec, offset);
+	}
 }
 
 static void

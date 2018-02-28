@@ -1014,6 +1014,7 @@ rmaps_verify_btree(
 		    mp->m_sb.sb_rrmapino == NULLFSINO) {
 			do_warn(
 _("garbage in sb_rrmapino, not checking realtime rmaps\n"));
+			need_rrmapino = 1;
 			goto err;
 		}
 

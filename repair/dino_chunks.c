@@ -921,6 +921,18 @@ next_readbuf:
 	_("would clear realtime summary inode %" PRIu64 "\n"),
 						ino);
 				}
+			} else if (mp->m_sb.sb_rrmapino == ino) {
+				need_rrmapino = 1;
+
+				if (!no_modify)  {
+					do_warn(
+	_("cleared realtime rmap inode %" PRIu64 "\n"),
+						ino);
+				} else  {
+					do_warn(
+	_("would clear realtime rmap inode %" PRIu64 "\n"),
+						ino);
+				}
 			} else if (!no_modify)  {
 				do_warn(_("cleared inode %" PRIu64 "\n"),
 					ino);

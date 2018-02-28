@@ -267,6 +267,12 @@ clear_dinode(xfs_mount_t *mp, xfs_dinode_t *dino, xfs_ino_t ino_num)
 	dirty = clear_dinode_core(mp, dino, ino_num);
 	dirty += clear_dinode_unlinked(mp, dino);
 
+	if (ino_num == mp->m_sb.sb_rrmapino) {
+		mp->m_sb.sb_rrmapino = NULLFSINO;
+		need_rrmapino = 1;
+		rmap_avoid_check();
+	}
+
 	/* and clear the forks */
 
 	if (dirty && !no_modify)
@@ -1850,6 +1856,27 @@ _("bad # of extents (%u) for realtime bitmap inode %" PRIu64 "\n"),
 		}
 		return 0;
 	}
+	if (lino == mp->m_sb.sb_rrmapino) {
+		if (*type != XR_INO_RTRMAP) {
+			do_warn(
+_("realtime rmap inode %" PRIu64 " has bad type 0x%x, "),
+				lino, dinode_fmt(dinoc));
+			if (!no_modify)  {
+				do_warn(_("resetting to regular file\n"));
+				change_dinode_fmt(dinoc, S_IFREG);
+				*dirty = 1;
+			} else  {
+				do_warn(_("would reset to regular file\n"));
+			}
+		}
+		if (mp->m_sb.sb_rblocks == 0 && dinoc->di_nextents != 0)  {
+			do_warn(
+_("bad # of extents (%u) for realtime rmap inode %" PRIu64 "\n"),
+				be32_to_cpu(dinoc->di_nextents), lino);
+			return 1;
+		}
+		return 0;
+	}
 	return 0;
 }
 
@@ -1936,6 +1963,18 @@ _("realtime bitmap inode %" PRIu64 " has bad size %" PRId64 " (should be %" PRIu
 			do_warn(
 _("realtime summary inode %" PRIu64 " has bad size %" PRId64 " (should be %d)\n"),
 				lino, size, mp->m_rsumsize);
+			return 1;
+		}
+		break;
+
+	case XR_INO_RTRMAP:
+		/*
+		 * if we have no rmapbt, any inode claiming
+		 * to be a real-time file is bogus
+		 */
+		if (!xfs_sb_version_hasrmapbt(&mp->m_sb)) {
+			do_warn(
+_("found inode %" PRIu64 " claiming to be a rtrmapbt file, but rmapbt is disabled\n"), lino);
 			return 1;
 		}
 		break;
@@ -2848,6 +2887,8 @@ _("bad (negative) size %" PRId64 " on inode %" PRIu64 "\n"),
 			type = XR_INO_RTBITMAP;
 		else if (lino == mp->m_sb.sb_rsumino)
 			type = XR_INO_RTSUM;
+		else if (lino == mp->m_sb.sb_rrmapino)
+			type = XR_INO_RTRMAP;
 		else
 			type = XR_INO_DATA;
 		break;

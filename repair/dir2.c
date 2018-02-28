@@ -236,6 +236,9 @@ process_sf_dir2(
 		} else if (lino == mp->m_sb.sb_rsumino)  {
 			junkit = 1;
 			junkreason = _("realtime summary");
+		} else if (lino == mp->m_sb.sb_rrmapino)  {
+			junkit = 1;
+			junkreason = _("realtime rmap");
 		} else if (lino == mp->m_sb.sb_uquotino)  {
 			junkit = 1;
 			junkreason = _("user quota");
@@ -695,6 +698,8 @@ process_dir2_data(
 			clearreason = _("realtime bitmap");
 		} else if (ent_ino == mp->m_sb.sb_rsumino) {
 			clearreason = _("realtime summary");
+		} else if (ent_ino == mp->m_sb.sb_rrmapino) {
+			clearreason = _("realtime rmap");
 		} else if (ent_ino == mp->m_sb.sb_uquotino) {
 			clearreason = _("user quota");
 		} else if (ent_ino == mp->m_sb.sb_gquotino) {

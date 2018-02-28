@@ -37,6 +37,7 @@ copy_sb(xfs_sb_t *source, xfs_sb_t *dest)
 	xfs_ino_t	rootino;
 	xfs_ino_t	rbmino;
 	xfs_ino_t	rsumino;
+	xfs_ino_t	rrmapino;
 	xfs_ino_t	uquotino;
 	xfs_ino_t	gquotino;
 	xfs_ino_t	pquotino;
@@ -45,6 +46,7 @@ copy_sb(xfs_sb_t *source, xfs_sb_t *dest)
 	rootino = dest->sb_rootino;
 	rbmino = dest->sb_rbmino;
 	rsumino = dest->sb_rsumino;
+	rrmapino = dest->sb_rrmapino;
 	uquotino = dest->sb_uquotino;
 	gquotino = dest->sb_gquotino;
 	pquotino = dest->sb_pquotino;
@@ -56,6 +58,7 @@ copy_sb(xfs_sb_t *source, xfs_sb_t *dest)
 	dest->sb_rootino = rootino;
 	dest->sb_rbmino = rbmino;
 	dest->sb_rsumino = rsumino;
+	dest->sb_rrmapino = rrmapino;
 	dest->sb_uquotino = uquotino;
 	dest->sb_gquotino = gquotino;
 	dest->sb_pquotino = pquotino;
