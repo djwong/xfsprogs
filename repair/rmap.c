@@ -987,6 +987,7 @@ rmaps_verify_btree(
 	struct xfs_rmap_irec	*rm_rec;
 	struct xfs_rmap_irec	tmp;
 	struct xfs_perag	*pag;		/* per allocation group data */
+	struct xfs_inode	*ip = NULL;
 
 	if (!xfs_sb_version_hasrmapbt(&mp->m_sb))
 		return 0;
@@ -995,22 +996,48 @@ rmaps_verify_btree(
 			do_warn(_("would rebuild corrupt rmap btrees.\n"));
 		return 0;
 	}
+	if (agno == NULLAGNUMBER && mp->m_sb.sb_rblocks == 0) {
+		if (rmap_record_count(mp, NULLAGNUMBER) != 0) {
+			do_error(_("realtime extents but no rtdev?\n"));
+			return -EFSCORRUPTED;
+		}
+		return 0;
+	}
 
-	/* Create cursors to refcount structures */
+	/* Create cursors to rmap structures */
 	error = rmap_init_cursor(agno, &rm_cur);
 	if (error)
 		return error;
 
-	error = -libxfs_alloc_read_agf(mp, NULL, agno, 0, &agbp);
-	if (error)
-		goto err;
+	if (agno == NULLAGNUMBER) {
+		if (mp->m_sb.sb_rrmapino == 0 ||
+		    mp->m_sb.sb_rrmapino == NULLFSINO) {
+			do_warn(
+_("garbage in sb_rrmapino, not checking realtime rmaps\n"));
+			goto err;
+		}
 
-	/* Leave the per-ag data "uninitialized" since we rewrite it later */
-	pag = libxfs_perag_get(mp, agno);
-	pag->pagf_init = 0;
-	libxfs_perag_put(pag);
+		error = -libxfs_iget(mp, NULL, mp->m_sb.sb_rrmapino, 0, &ip,
+				&xfs_default_ifork_ops);
+		if (error) {
+			do_warn(_("%d - couldn't iget rtrmap inode.\n"),
+				 error);
+			goto err;
+		}
+		mp->m_rrmapip = ip;
+		bt_cur = libxfs_rtrmapbt_init_cursor(mp, NULL, mp->m_rrmapip);
+	} else {
+		error = -libxfs_alloc_read_agf(mp, NULL, agno, 0, &agbp);
+		if (error)
+			goto err;
 
-	bt_cur = libxfs_rmapbt_init_cursor(mp, NULL, agbp, agno);
+		/* Leave the per-ag data "uninitialized" since we rewrite it later */
+		pag = libxfs_perag_get(mp, agno);
+		pag->pagf_init = 0;
+		libxfs_perag_put(pag);
+
+		bt_cur = libxfs_rmapbt_init_cursor(mp, NULL, agbp, agno);
+	}
 	if (!bt_cur) {
 		error = -ENOMEM;
 		goto err;
@@ -1086,6 +1113,10 @@ err:
 		libxfs_btree_del_cursor(bt_cur, XFS_BTREE_NOERROR);
 	if (agbp)
 		libxfs_putbuf(agbp);
+	if (ip) {
+		IRELE(mp->m_rrmapip);
+		mp->m_rrmapip = NULL;
+	}
 	free_slab_cursor(&rm_cur);
 	return 0;
 }
