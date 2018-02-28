@@ -629,7 +629,7 @@ xfs_bmap_btree_to_extents(
 	xfs_trans_binval(tp, cbp);
 	if (cur->bc_bufs[0] == cbp)
 		cur->bc_bufs[0] = NULL;
-	xfs_iroot_realloc(ip, -1, whichfork);
+	cur->bc_ops->iroot_realloc(cur, -1);
 	ASSERT(ifp->if_broot == NULL);
 	ASSERT((ifp->if_flags & XFS_IFBROOT) == 0);
 	XFS_IFORK_FMT_SET(ip, whichfork, XFS_DINODE_FMT_EXTENTS);
@@ -675,7 +675,7 @@ xfs_bmap_extents_to_btree(
 	/*
 	 * Make space in the inode incore.
 	 */
-	xfs_iroot_realloc(ip, 1, whichfork);
+	xfs_bmbt_iroot_realloc(ip, 1, whichfork);
 	ifp->if_flags |= XFS_IFBROOT;
 
 	/*
@@ -715,13 +715,13 @@ xfs_bmap_extents_to_btree(
 	args.wasdel = wasdel;
 	*logflagsp = 0;
 	if ((error = xfs_alloc_vextent(&args))) {
-		xfs_iroot_realloc(ip, -1, whichfork);
+		cur->bc_ops->iroot_realloc(cur, -1);
 		xfs_btree_del_cursor(cur, XFS_BTREE_ERROR);
 		return error;
 	}
 
 	if (WARN_ON_ONCE(args.fsbno == NULLFSBLOCK)) {
-		xfs_iroot_realloc(ip, -1, whichfork);
+		cur->bc_ops->iroot_realloc(cur, -1);
 		xfs_btree_del_cursor(cur, XFS_BTREE_ERROR);
 		return -ENOSPC;
 	}

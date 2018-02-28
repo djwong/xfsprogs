@@ -120,5 +120,7 @@ extern struct xfs_btree_cur *xfs_bmbt_init_cursor(struct xfs_mount *,
 
 extern unsigned long long xfs_bmbt_calc_size(struct xfs_mount *mp,
 		unsigned long long len);
+extern void xfs_bmbt_iroot_realloc(struct xfs_inode *ip, int rec_diff,
+		int whichfork);
 
 #endif	/* __XFS_BMAP_BTREE_H__ */

@@ -161,6 +161,13 @@ struct xfs_btree_ops {
 				   union xfs_btree_key *key1,
 				   union xfs_btree_key *key2);
 
+	/*
+	 * Reallocate the space for if_broot based on the number of records
+	 * being added or deleted as indicated in rec_diff.
+	 */
+	void (*iroot_realloc)(struct xfs_btree_cur *cur,
+			      int rec_diff);
+
 	const struct xfs_buf_ops	*buf_ops;
 
 	/* check that k1 is lower than k2 */
