@@ -453,7 +453,7 @@ rtmount_init(
 		(uint)sizeof(xfs_suminfo_t) * mp->m_rsumlevels *
 		sbp->sb_rbmblocks;
 	mp->m_rsumsize = roundup(mp->m_rsumsize, sbp->sb_blocksize);
-	mp->m_rbmip = mp->m_rsumip = NULL;
+	mp->m_rbmip = mp->m_rsumip = mp->m_rrmapip = NULL;
 
 	/*
 	 * Allow debugger to be run without the realtime device present.
@@ -855,11 +855,13 @@ libxfs_mount(
 void
 libxfs_rtmount_destroy(xfs_mount_t *mp)
 {
+	if (mp->m_rrmapip)
+		IRELE(mp->m_rrmapip);
 	if (mp->m_rsumip)
 		IRELE(mp->m_rsumip);
 	if (mp->m_rbmip)
 		IRELE(mp->m_rbmip);
-	mp->m_rsumip = mp->m_rbmip = NULL;
+	mp->m_rsumip = mp->m_rbmip = mp->m_rrmapip = NULL;
 }
 
 /*

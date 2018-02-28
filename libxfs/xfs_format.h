@@ -183,6 +183,7 @@ typedef struct xfs_sb {
 	xfs_ino_t	sb_pquotino;	/* project quota inode */
 	xfs_lsn_t	sb_lsn;		/* last write sequence */
 	uuid_t		sb_meta_uuid;	/* metadata file system unique id */
+	xfs_ino_t	sb_rrmapino;	/* realtime reverse map inode */
 
 	/* must be padded to 64 bit alignment */
 } xfs_sb_t;
@@ -270,6 +271,7 @@ typedef struct xfs_dsb {
 	__be64		sb_pquotino;	/* project quota inode */
 	__be64		sb_lsn;		/* last write sequence */
 	uuid_t		sb_meta_uuid;	/* metadata file system unique id */
+	__be64		sb_rrmapino;	/* realtime reverse map inode */
 
 	/* must be padded to 64 bit alignment */
 } xfs_dsb_t;
@@ -551,6 +553,11 @@ static inline bool xfs_sb_version_hasrmapbt(struct xfs_sb *sbp)
 {
 	return (XFS_SB_VERSION_NUM(sbp) == XFS_SB_VERSION_5) &&
 		(sbp->sb_features_ro_compat & XFS_SB_FEAT_RO_COMPAT_RMAPBT);
+}
+
+static inline bool xfs_sb_version_hasrtrmapbt(struct xfs_sb *sbp)
+{
+	return sbp->sb_rblocks > 0 && xfs_sb_version_hasrmapbt(sbp);
 }
 
 static inline bool xfs_sb_version_hasreflink(struct xfs_sb *sbp)
@@ -935,7 +942,8 @@ typedef enum xfs_dinode_fmt {
 	XFS_DINODE_FMT_LOCAL,		/* bulk data */
 	XFS_DINODE_FMT_EXTENTS,		/* struct xfs_bmbt_rec */
 	XFS_DINODE_FMT_BTREE,		/* struct xfs_bmdr_block */
-	XFS_DINODE_FMT_UUID		/* added long ago, but never used */
+	XFS_DINODE_FMT_UUID,		/* added long ago, but never used */
+	XFS_DINODE_FMT_RMAP,		/* reverse mapping btree */
 } xfs_dinode_fmt_t;
 
 /*

@@ -466,6 +466,10 @@ xfs_dinode_verify(
 		case XFS_DINODE_FMT_EXTENTS:
 		case XFS_DINODE_FMT_BTREE:
 			break;
+		case XFS_DINODE_FMT_RMAP:
+			if (ino != mp->m_sb.sb_rrmapino)
+				return __this_address;
+			break;
 		default:
 			return __this_address;
 		}

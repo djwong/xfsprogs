@@ -429,6 +429,7 @@ __xfs_sb_from_disk(
 		uuid_copy(&to->sb_meta_uuid, &from->sb_meta_uuid);
 	else
 		uuid_copy(&to->sb_meta_uuid, &from->sb_uuid);
+	to->sb_rrmapino = be64_to_cpu(from->sb_rrmapino);
 	/* Convert on-disk flags to in-memory flags? */
 	if (convert_xquota)
 		xfs_sb_quota_from_disk(to);
@@ -572,6 +573,7 @@ xfs_sb_to_disk(
 		to->sb_lsn = cpu_to_be64(from->sb_lsn);
 		if (xfs_sb_version_hasmetauuid(from))
 			uuid_copy(&to->sb_meta_uuid, &from->sb_meta_uuid);
+		to->sb_rrmapino = cpu_to_be64(from->sb_rrmapino);
 	}
 }
 
