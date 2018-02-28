@@ -81,10 +81,13 @@ init(
 	textdomain(PACKAGE);
 
 	fs_table_initialise(0, NULL, 0, NULL);
-	while ((c = getopt(argc, argv, "c:V")) != EOF) {
+	while ((c = getopt(argc, argv, "c:p:V")) != EOF) {
 		switch (c) {
 		case 'c':
 			add_user_command(optarg);
+			break;
+		case 'p':
+			progname = optarg;
 			break;
 		case 'V':
 			printf(_("%s version %s\n"), progname, VERSION);

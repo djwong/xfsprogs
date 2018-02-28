@@ -10,7 +10,7 @@ while getopts "t:V" c
 do
 	case $c in
 	t)	OPTS="-t $OPTARG" ;;
-	V)	xfs_growfs -p xfs_info -V
+	V)	xfs_spaceman -p xfs_info -V
 		status=$?
 		exit $status
 		;;
@@ -22,7 +22,7 @@ done
 set -- extra "$@"
 shift $OPTIND
 case $# in
-	1)	xfs_growfs -p xfs_info -n $OPTS "$1"
+	1)	xfs_spaceman -p xfs_info -c "info" $OPTS "$1"
 		status=$?
 		;;
 	*)	echo $USAGE 1>&2
