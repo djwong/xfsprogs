@@ -93,6 +93,7 @@ typedef struct xfs_mount {
 	int			m_inoalign_mask;/* mask sb_inoalignmt if used */
 	struct xfs_trans_resv	m_resv;		/* precomputed res values */
 	uint64_t		m_maxicount;	/* maximum inode count */
+	uint64_t		m_ag_resv;	/* total perag reservation */
 	int			m_dalign;	/* stripe unit */
 	int			m_swidth;	/* stripe width */
 	int			m_sinoalign;	/* stripe unit inode alignmnt */
