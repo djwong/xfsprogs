@@ -116,6 +116,9 @@ struct xfs_extent_free_item
 /* Only convert unwritten extents, don't allocate new blocks */
 #define XFS_BMAPI_CONVERT_ONLY	0x800
 
+/* Do not update the rmap btree.  Used for reconstructing bmbt from rmapbt. */
+#define XFS_BMAPI_NORMAP	0x1000
+
 #define XFS_BMAPI_FLAGS \
 	{ XFS_BMAPI_ENTIRE,	"ENTIRE" }, \
 	{ XFS_BMAPI_METADATA,	"METADATA" }, \
@@ -128,7 +131,8 @@ struct xfs_extent_free_item
 	{ XFS_BMAPI_REMAP,	"REMAP" }, \
 	{ XFS_BMAPI_COWFORK,	"COWFORK" }, \
 	{ XFS_BMAPI_DELALLOC,	"DELALLOC" }, \
-	{ XFS_BMAPI_CONVERT_ONLY, "CONVERT_ONLY" }
+	{ XFS_BMAPI_CONVERT_ONLY, "CONVERT_ONLY" }, \
+	{ XFS_BMAPI_NORMAP,	"NORMAP" }
 
 
 static inline int xfs_bmapi_aflag(int w)
@@ -276,5 +280,9 @@ static inline int xfs_bmap_fork_to_state(int whichfork)
 
 xfs_failaddr_t xfs_bmap_validate_extent(struct xfs_inode *ip, int whichfork,
 		struct xfs_bmbt_irec *irec);
+
+int	xfs_bmapi_remap(struct xfs_trans *tp, struct xfs_inode *ip,
+		xfs_fileoff_t bno, xfs_filblks_t len, xfs_fsblock_t startblock,
+		struct xfs_defer_ops *dfops, int flags);
 
 #endif	/* __XFS_BMAP_H__ */
