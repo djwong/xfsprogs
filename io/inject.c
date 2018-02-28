@@ -63,6 +63,7 @@ error_tag(char *name)
 		{ XFS_ERRTAG_LOG_BAD_CRC,		"log_bad_crc" },
 		{ XFS_ERRTAG_LOG_ITEM_PIN,		"log_item_pin" },
 		{ XFS_ERRTAG_BUF_LRU_REF,		"buf_lru_ref" },
+		{ XFS_ERRTAG_FORCE_SCRUB_REPAIR,	"force_repair" },
 		{ XFS_ERRTAG_MAX,			NULL }
 	};
 	int	count;

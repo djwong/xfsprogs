@@ -228,6 +228,11 @@ The checker was unable to complete its check of all records.
 The checker encountered a metadata object with potentially problematic
 records.
 However, the records were not obviously corrupt.
+.TP
+.B XFS_SCRUB_OFLAG_UNTOUCHED
+A metadata repair was requested, but the metadata was not found to be corrupt
+or eligible for optimization.
+Consequently, the filesystem was not modified.
 .RE
 .PP
 For metadata checkers that operate on inodes or inode metadata, the fields

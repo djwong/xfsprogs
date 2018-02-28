@@ -768,8 +768,10 @@ _("Read-only filesystem; cannot make changes."));
 			str_error(ctx, buf,
 _("Repair unsuccessful; offline repair required."));
 	} else {
-		/* Clean operation, no corruption detected. */
-		if (needs_repair(&oldm))
+		/* Clean metadata, no corruption remains. */
+		if (meta.sm_flags & XFS_SCRUB_OFLAG_UNTOUCHED)
+			str_info(ctx, buf, _("Repairs unnecessary."));
+		else if (needs_repair(&oldm))
 			record_repair(ctx, buf, _("Repairs successful."));
 		else
 			record_preen(ctx, buf, _("Optimization successful."));
