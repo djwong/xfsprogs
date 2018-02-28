@@ -13,6 +13,7 @@ LT_AGE = 0
 CFILES = \
 avl64.c \
 convert.c \
+fsgeom.c \
 list_sort.c \
 paths.c \
 projects.c \
