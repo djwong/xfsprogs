@@ -455,6 +455,64 @@ err:
 	return ret;
 }
 
+static bool
+is_btree_inode(void)
+{
+	return iocur_top->ino == mp->m_sb.sb_rrmapino;
+}
+
+static int
+dump_btree_inode(
+	bool			dump_node_blocks)
+{
+	char			*prefix;
+	struct xfs_dinode	*dip;
+	struct xfs_rtrmap_root	*rtrmap;
+	int			level;
+	int			numrecs;
+	int			ret;
+
+	dip = iocur_top->data;
+	switch (dip->di_format) {
+	case XFS_DINODE_FMT_RMAP:
+		prefix = "u3.rtrmapbt";
+		rtrmap = (struct xfs_rtrmap_root *)XFS_DFORK_DPTR(dip);
+		level = be16_to_cpu(rtrmap->bb_level);
+		numrecs = be16_to_cpu(rtrmap->bb_numrecs);
+		break;
+	default:
+		dbprintf("Unknown metadata inode type %u\n", dip->di_format);
+		return 0;
+	}
+
+	if (numrecs == 0)
+		return 0;
+	if (level > 0) {
+		if (dump_node_blocks) {
+			ret = eval("print %s.keys", prefix);
+			if (ret)
+				goto err;
+			ret = eval("print %s.ptrs", prefix);
+			if (ret)
+				goto err;
+		}
+		ret = eval("addr %s.ptrs[1]", prefix);
+		if (ret)
+			goto err;
+		ret = dump_btree_long(dump_node_blocks);
+	} else {
+		ret = eval("print %s.recs", prefix);
+	}
+	if (ret)
+		goto err;
+
+	ret = eval("pop");
+	return ret;
+err:
+	eval("pop");
+	return ret;
+}
+
 static int
 btdump_f(
 	int		argc,
@@ -502,8 +560,11 @@ btdump_f(
 		return dump_btree_short(iflag);
 	case TYP_BMAPBTA:
 	case TYP_BMAPBTD:
+	case TYP_RTRMAPBT:
 		return dump_btree_long(iflag);
 	case TYP_INODE:
+		if (is_btree_inode())
+			return dump_btree_inode(iflag);
 		return dump_inode(iflag, aflag);
 	case TYP_ATTR:
 		return dump_dabtree(iflag, crc ? &attr3_print : &attr_print);

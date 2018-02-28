@@ -159,6 +159,9 @@ block_to_bt(
 	case TYP_RMAPBT:
 		magic = crc ? XFS_RMAP_CRC_MAGIC : 0;
 		break;
+	case TYP_RTRMAPBT:
+		magic = crc ? XFS_RTRMAP_CRC_MAGIC : 0;
+		break;
 	case TYP_REFCBT:
 		magic = crc ? XFS_REFC_CRC_MAGIC : 0;
 		break;
