@@ -424,6 +424,18 @@ verify_agbno(xfs_mount_t	*mp,
 	return verify_ag_bno(sbp, agno, agbno) == 0;
 }
 
+/*
+ * Verify realtime device block number.
+ * Returns 1 for good rtfsb or 0 if it's invalid.
+ */
+int
+verify_drtbno(
+	struct xfs_mount	*mp,
+	xfs_fsblock_t		fsb)
+{
+	return fsb < mp->m_sb.sb_rblocks;
+}
+
 static int
 process_rt_rec(
 	xfs_mount_t		*mp,
@@ -440,7 +452,7 @@ process_rt_rec(
 	/*
 	 * check numeric validity of the extent
 	 */
-	if (irec->br_startblock >= mp->m_sb.sb_rblocks) {
+	if (!verify_drtbno(mp, irec->br_startblock)) {
 		do_warn(
 _("inode %" PRIu64 " - bad rt extent start block number %" PRIu64 ", offset %" PRIu64 "\n"),
 			ino,
@@ -448,7 +460,7 @@ _("inode %" PRIu64 " - bad rt extent start block number %" PRIu64 ", offset %" P
 			irec->br_startoff);
 		return 1;
 	}
-	if (irec->br_startblock + irec->br_blockcount - 1 >= mp->m_sb.sb_rblocks) {
+	if (!verify_drtbno(mp, irec->br_startblock + irec->br_blockcount)) {
 		do_warn(
 _("inode %" PRIu64 " - bad rt extent last block number %" PRIu64 ", offset %" PRIu64 "\n"),
 			ino,
@@ -919,6 +931,145 @@ get_agino_buf(
  * higher level inode processing stuff starts here:
  * first, one utility routine for each type of inode
  */
+
+/*
+ * return 1 if inode should be cleared, 0 otherwise
+ */
+static int
+process_rtrmap(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno,
+	xfs_agino_t		ino,
+	struct xfs_dinode	*dip,
+	int			type,
+	int			*dirty,
+	xfs_rfsblock_t		*tot,
+	uint64_t		*nex,
+	blkmap_t		**blkmapp,
+	int			check_dups)
+{
+	struct xfs_rtrmap_root	*dib;
+	xfs_ino_t		lino;
+	xfs_rtrmap_ptr_t	*pp;
+	struct xfs_rtrmap_key	*kp;
+	struct xfs_rtrmap_rec	*rp;
+	int			whichfork = XFS_DATA_FORK;
+	char			*forkname = get_forkname(whichfork);
+	int			i;
+	int			level;
+	int			numrecs;
+	xfs_fsblock_t		bno;
+	struct xfs_rmap_irec	oldkey;
+	struct xfs_rmap_irec	key;
+	struct rmap_priv	priv;
+	int			suspect = 0;
+	int			error;
+
+	/* We rebuild the rtrmapbt, so no need to process blocks again. */
+	if (check_dups) {
+		*tot = be64_to_cpu(dip->di_nblocks);
+		return 0;
+	}
+
+	memset(&priv.high_key, 0xFF, sizeof(priv.high_key));
+	priv.high_key.rm_blockcount = 0;
+	priv.agcnts = NULL;
+	priv.last_rec.rm_owner = XFS_RMAP_OWN_UNKNOWN;
+
+	dib = (struct xfs_rtrmap_root *)XFS_DFORK_PTR(dip, whichfork);
+	lino = XFS_AGINO_TO_INO(mp, agno, ino);
+	*tot = 0;
+	*nex = 0;
+
+	level = be16_to_cpu(dib->bb_level);
+	numrecs = be16_to_cpu(dib->bb_numrecs);
+
+	if (level > mp->m_rtrmap_maxlevels) {
+		do_warn(
+_("bad level %d in inode %" PRIu64 " rtrmap btree root block\n"),
+			level, lino);
+		return 1;
+	}
+
+	/*
+	 * use rtroot/dfork_dsize since the root block is in the data fork
+	 */
+	if (XFS_RTRMAP_ROOT_SPACE_CALC(numrecs, level) >
+	    XFS_DFORK_SIZE(dip, mp, whichfork)) {
+		do_warn(
+_("indicated size of %s rtrmapbt root (%d bytes) greater than space in "
+	  "inode %" PRIu64 " %s fork\n"),
+			forkname, XFS_RTRMAP_ROOT_SPACE_CALC(numrecs, level),
+			lino, forkname);
+		return 1;
+	}
+
+	if (level == 0) {
+		rp = XFS_RTRMAP_ROOT_REC_ADDR(dib, 1);
+		error = process_rtrmap_reclist(mp, rp, numrecs,
+				&priv.last_rec, NULL, "rtrmapbt root");
+		if (error) {
+			rmap_avoid_check();
+			return 1;
+		}
+		return 0;
+	}
+
+	pp = XFS_RTRMAP_ROOT_PTR_ADDR(dib, 1,
+			libxfs_rtrmapbt_maxrecs(mp,
+				XFS_DFORK_SIZE(dip, mp, whichfork), 0));
+
+	/* check for in-order keys */
+	for (i = 0; i < numrecs; i++)  {
+		kp = XFS_RTRMAP_ROOT_KEY_ADDR(dib, i + 1);
+
+		key.rm_flags = 0;
+		key.rm_startblock = be64_to_cpu(kp->rm_startblock);
+		key.rm_owner = be64_to_cpu(kp->rm_owner);
+		if (libxfs_rmap_irec_offset_unpack(be64_to_cpu(kp->rm_offset),
+				&key)) {
+			/* Look for impossible flags. */
+			do_warn(
+_("invalid flags in key %u of rtrmap root ino %" PRIu64 "\n"),
+				i, lino);
+			suspect++;
+			continue;
+		}
+		if (i == 0) {
+			oldkey = key;
+			continue;
+		}
+		if (rmap_diffkeys(&oldkey, &key) > 0) {
+			do_warn(
+_("out of order key %u in rtrmap root ino %" PRIu64 "\n"),
+				i, lino);
+			suspect++;
+			continue;
+		}
+		oldkey = key;
+	}
+
+	/* probe keys */
+	for (i = 0; i < numrecs; i++)  {
+		bno = get_unaligned_be64(&pp[i]);
+
+		if (!verify_dfsbno(mp, bno))  {
+			do_warn(
+_("bad rtrmap btree ptr 0x%" PRIx64 " in ino %" PRIu64 "\n"),
+				bno, lino);
+			return 1;
+		}
+
+		if (scan_lbtree(bno, level, scan_rtrmapbt,
+				type, whichfork, lino, tot, nex, blkmapp,
+				NULL, 1, check_dups, XFS_RTRMAP_CRC_MAGIC,
+				&priv,
+				&xfs_rtrmapbt_buf_ops))
+			return 1;
+	}
+
+	return suspect ? 1 : 0;
+}
 
 /*
  * return 1 if inode should be cleared, 0 otherwise
@@ -1557,9 +1708,13 @@ change_dinode_fmt(
 
 static int
 check_dinode_mode_format(
-	xfs_dinode_t *dinoc)
+	struct xfs_mount	*mp,
+	xfs_ino_t		lino,
+	struct xfs_dinode	*dinoc)
 {
-	if (dinoc->di_format >= XFS_DINODE_FMT_UUID)
+	if (lino == mp->m_sb.sb_rrmapino)
+		return dinoc->di_format != XFS_DINODE_FMT_RMAP;
+	else if (dinoc->di_format >= XFS_DINODE_FMT_UUID)
 		return -1;	/* FMT_UUID is not used */
 
 	switch (dinode_fmt(dinoc)) {
@@ -1963,6 +2118,10 @@ retry:
 			totblocks, nextents, dblkmap, XFS_DATA_FORK,
 			check_dups);
 		break;
+	case XFS_DINODE_FMT_RMAP:
+		err = process_rtrmap(mp, agno, ino, dino, type, dirty,
+			totblocks, nextents, dblkmap, check_dups);
+		break;
 	case XFS_DINODE_FMT_DEV:	/* fall through */
 		err = 0;
 		break;
@@ -2021,6 +2180,7 @@ _("would have tried to rebuild inode %"PRIu64" data fork\n"),
 				XFS_DATA_FORK, 0);
 			break;
 		case XFS_DINODE_FMT_DEV:	/* fall through */
+		case XFS_DINODE_FMT_RMAP:
 			err = 0;
 			break;
 		default:
@@ -2457,7 +2617,7 @@ _("bad (negative) size %" PRId64 " on inode %" PRIu64 "\n"),
 	 * free inodes since technically any format is legal
 	 * as we reset the inode when we re-use it.
 	 */
-	if (di_mode != 0 && check_dinode_mode_format(dino) != 0) {
+	if (di_mode != 0 && check_dinode_mode_format(mp, lino, dino) != 0) {
 		if (!uncertain)
 			do_warn(
 	_("bad inode format in inode %" PRIu64 "\n"), lino);
