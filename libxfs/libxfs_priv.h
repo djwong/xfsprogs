@@ -542,6 +542,8 @@ void xfs_inode_verifier_error(struct xfs_inode *ip, int error,
 /* xfs_rtalloc.c */
 int libxfs_rtfree_extent(struct xfs_trans *, xfs_rtblock_t, xfs_extlen_t);
 
+bool xfs_verify_rtbno(struct xfs_mount *mp, xfs_rtblock_t rtbno);
+
 struct xfs_rtalloc_rec {
 	xfs_rtblock_t		ar_startblock;
 	xfs_rtblock_t		ar_blockcount;
