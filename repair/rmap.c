@@ -46,7 +46,7 @@ struct xfs_ag_rmap {
 };
 
 static struct xfs_ag_rmap *ag_rmaps;
-static bool rmapbt_suspect;
+bool rmapbt_suspect;
 static bool refcbt_suspect;
 
 static inline int rmap_compare(const void *a, const void *b)

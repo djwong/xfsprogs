@@ -32,6 +32,7 @@
 #include "threads.h"
 #include "slab.h"
 #include "rmap.h"
+#include "rebuild.h"
 
 /*
  * gettext lookups for translations of strings use mutexes internally to
@@ -1925,7 +1926,9 @@ process_inode_data_fork(
 	xfs_ino_t		lino = XFS_AGINO_TO_INO(mp, agno, ino);
 	int			err = 0;
 	int			nex;
+	bool			try_rebuild = !rmapbt_suspect;
 
+retry:
 	/*
 	 * extent count on disk is only valid for positive values. The kernel
 	 * uses negative values in memory. hence if we see negative numbers
@@ -1971,8 +1974,27 @@ process_inode_data_fork(
 	if (err)  {
 		do_warn(_("bad data fork in inode %" PRIu64 "\n"), lino);
 		if (!no_modify)  {
+			if (try_rebuild) {
+				do_warn(
+_("rebuilding inode %"PRIu64" data fork\n"),
+					lino);
+				try_rebuild = false;
+				err = rebuild_bmap(mp, lino, XFS_DATA_FORK,
+						be32_to_cpu(dino->di_nextents),
+						ino_bpp, dinop, dirty);
+				dino = *dinop;
+				if (!err)
+					goto retry;
+				do_warn(
+_("inode %"PRIu64" data fork rebuild failed, error %d, clearing\n"),
+					lino, err);
+			}
 			*dirty += clear_dinode(mp, dino, lino);
 			ASSERT(*dirty > 0);
+		} else if (try_rebuild) {
+			do_warn(
+_("would have tried to rebuild inode %"PRIu64" data fork\n"),
+					lino);
 		}
 		return 1;
 	}
@@ -2038,7 +2060,9 @@ process_inode_attr_fork(
 	struct blkmap		*ablkmap = NULL;
 	int			repair = 0;
 	int			err;
+	bool			try_rebuild = !rmapbt_suspect;
 
+retry:
 	if (!XFS_DFORK_Q(dino)) {
 		*anextents = 0;
 		if (dino->di_aformat != XFS_DINODE_FMT_EXTENTS) {
@@ -2097,6 +2121,21 @@ process_inode_attr_fork(
 		do_warn(_("bad attribute fork in inode %" PRIu64 "\n"), lino);
 
 		if (!no_modify)  {
+			if (try_rebuild) {
+				try_rebuild = false;
+				do_warn(
+_("rebuilding inode %"PRIu64" attr fork\n"),
+					lino);
+				err = rebuild_bmap(mp, lino, XFS_ATTR_FORK,
+						be32_to_cpu(dino->di_nextents),
+						ino_bpp, dinop, dirty);
+				dino = *dinop;
+				if (!err)
+					goto retry;
+				do_warn(
+_("inode %"PRIu64" attr fork rebuild failed, error %d"),
+					lino, err);
+			}
 			if (delete_attr_ok)  {
 				do_warn(_(", clearing attr fork\n"));
 				*dirty += clear_dinode_attr(mp, dino, lino);
@@ -2106,7 +2145,11 @@ process_inode_attr_fork(
 				*dirty += clear_dinode(mp, dino, lino);
 			}
 			ASSERT(*dirty > 0);
-		} else  {
+		} else if (try_rebuild) {
+			do_warn(
+_("would have tried to rebuild inode %"PRIu64" attr fork or cleared it\n"),
+					lino);
+		} else {
 			do_warn(_(", would clear attr fork\n"));
 		}
 

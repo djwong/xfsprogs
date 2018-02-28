@@ -21,6 +21,7 @@
 #define RMAP_H_
 
 extern bool collect_rmaps;
+extern bool rmapbt_suspect;
 
 extern bool rmap_needs_work(struct xfs_mount *);
 

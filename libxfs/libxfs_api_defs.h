@@ -153,5 +153,9 @@
 #define xfs_dir_get_ops			libxfs_dir_get_ops
 #define xfs_default_ifork_ops		libxfs_default_ifork_ops
 #define xfs_fs_geometry			libxfs_fs_geometry
+#define xfs_bmbt_calc_size		libxfs_bmbt_calc_size
+#define xfs_rmap_query_all		libxfs_rmap_query_all
+#define xfs_bmapi_remap			libxfs_bmapi_remap
+#define xfs_imap_to_bp			libxfs_imap_to_bp
 
 #endif /* __LIBXFS_API_DEFS_H__ */
