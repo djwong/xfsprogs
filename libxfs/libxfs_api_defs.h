@@ -152,5 +152,6 @@
 #define xfs_rmap_compare		libxfs_rmap_compare
 #define xfs_dir_get_ops			libxfs_dir_get_ops
 #define xfs_default_ifork_ops		libxfs_default_ifork_ops
+#define xfs_fs_geometry			libxfs_fs_geometry
 
 #endif /* __LIBXFS_API_DEFS_H__ */
