@@ -780,7 +780,7 @@ The possible data types are:
 .BR agf ", " agfl ", " agi ", " attr ", " bmapbta ", " bmapbtd ,
 .BR bnobt ", " cntbt ", " data ", " dir ", " dir2 ", " dqblk ,
 .BR inobt ", " inode ", " log ", " refcntbt ", " rmapbt ", " rtbitmap ,
-.BR rtsummary ", " sb ", " symlink " and " text .
+.BR rtsummary ", " sb ", " symlink ", " rtrmapbt ", and " text .
 See the TYPES section below for more information on these data types.
 .TP
 .BI "uuid [" uuid " | " generate " | " rewrite " | " restore ]
@@ -1858,6 +1858,64 @@ blocks.  Each block has the following fields:
 .TP 1.2i
 .B magic
 RMAP block magic number, 0x524d4233 ('RMB3').
+.TP
+.B level
+level number of this block, 0 is a leaf.
+.TP
+.B numrecs
+number of data entries in the block.
+.TP
+.B leftsib
+left (logically lower) sibling block, 0 if none.
+.TP
+.B rightsib
+right (logically higher) sibling block, 0 if none.
+.TP
+.B recs
+[leaf blocks only] array of reference count records. Each record contains
+.BR startblock ,
+.BR blockcount ,
+.BR owner ,
+.BR offset ,
+.BR attr_fork ,
+.BR bmbt_block ,
+and
+.BR unwritten .
+.TP
+.B keys
+[non-leaf blocks only] array of double-key records. The first ("low") key
+contains the first value of each block in the level below this one. The second
+("high") key contains the largest key that can be used to identify any record
+in the subtree. Each record contains
+.BR startblock ,
+.BR owner ,
+.BR offset ,
+.BR attr_fork ,
+and
+.BR bmbt_block .
+.TP
+.B ptrs
+[non-leaf blocks only] array of child block pointers. Each pointer is a
+block number within the allocation group to the next level in the Btree.
+.PD
+.RE
+.TP
+.B rtrmapbt
+There is one reverse mapping Btree for the entire realtime device.  The
+.BR startblock " and "
+.B blockcount
+fields are 64 bits wide and record block counts on the realtime device.  The
+root of this Btree is the reverse-mapping inode, which is recorded in the
+superblock
+.B rrmapino
+field.  Blocks are linked to sibling left and right blocks at each level, as
+well as by pointers from parent to child blocks.  Each block has the following
+fields:
+.RS 1.4i
+.PD 0
+.TP 1.2i
+.B magic
+RTRMAP block magic number, 0x4d415052 ('MAPR').
 .TP
 .B level
 level number of this block, 0 is a leaf.

@@ -157,5 +157,6 @@
 #define xfs_rmap_query_all		libxfs_rmap_query_all
 #define xfs_bmapi_remap			libxfs_bmapi_remap
 #define xfs_imap_to_bp			libxfs_imap_to_bp
+#define xfs_rtrmapbt_maxrecs		libxfs_rtrmapbt_maxrecs
 
 #endif /* __LIBXFS_API_DEFS_H__ */
