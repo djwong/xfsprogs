@@ -629,24 +629,25 @@ parse_proto(
  */
 static void
 rtinit(
-	xfs_mount_t	*mp)
+	struct xfs_mount	*mp)
 {
-	xfs_fileoff_t	bno;
-	xfs_fileoff_t	ebno;
-	xfs_bmbt_irec_t	*ep;
-	int		error;
-	xfs_fsblock_t	first;
+	xfs_fileoff_t		bno;
+	xfs_fileoff_t		ebno;
+	struct xfs_bmbt_irec	*ep;
+	int			error;
+	xfs_fsblock_t		first;
 	struct xfs_defer_ops	dfops;
-	int		i;
-	xfs_bmbt_irec_t	map[XFS_BMAP_MAX_NMAP];
-	xfs_extlen_t	nsumblocks;
-	int		nmap;
-	xfs_inode_t	*rbmip;
-	xfs_inode_t	*rsumip;
-	xfs_trans_t	*tp;
-	struct cred	creds;
-	struct fsxattr	fsxattrs;
-	struct xfs_trans_res tres = {0};
+	int			i;
+	struct xfs_bmbt_irec	map[XFS_BMAP_MAX_NMAP];
+	xfs_extlen_t		nsumblocks;
+	int			nmap;
+	struct xfs_inode	*rbmip;
+	struct xfs_inode	*rsumip;
+	struct xfs_inode	*rrmapip;
+	struct xfs_trans	*tp;
+	struct cred		creds;
+	struct fsxattr		fsxattrs;
+	struct xfs_trans_res	tres = {0};
 
 	/*
 	 * First, allocate the inodes.
@@ -683,8 +684,24 @@ rtinit(
 	rsumip->i_d.di_size = mp->m_rsumsize;
 	libxfs_trans_log_inode(tp, rsumip, XFS_ILOG_CORE);
 	libxfs_log_sb(tp);
-	libxfs_trans_commit(tp);
 	mp->m_rsumip = rsumip;
+
+	/* If we have rmap and a realtime device, create a rtrmapbt inode. */
+	if (xfs_sb_version_hasrmapbt(&mp->m_sb) && mp->m_sb.sb_rblocks > 0) {
+		error = -libxfs_inode_alloc(&tp, NULL, S_IFREG, 1, 0,
+				&creds, &fsxattrs, &rrmapip);
+		if (error) {
+			fail(_("Realtime rmap inode allocation failed"), error);
+		}
+		mp->m_sb.sb_rrmapino = rrmapip->i_ino;
+		rrmapip->i_d.di_size = 0;
+		rrmapip->i_d.di_format = XFS_DINODE_FMT_RMAP;
+		libxfs_trans_log_inode(tp, rrmapip, XFS_ILOG_CORE);
+		libxfs_log_sb(tp);
+		mp->m_rrmapip = rrmapip;
+	}
+	libxfs_trans_commit(tp);
+
 	/*
 	 * Next, give the bitmap file some zero-filled blocks.
 	 */
