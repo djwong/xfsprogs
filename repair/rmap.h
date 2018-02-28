@@ -28,7 +28,8 @@ extern bool rmap_needs_work(struct xfs_mount *);
 extern void rmaps_init(struct xfs_mount *);
 extern void rmaps_free(struct xfs_mount *);
 
-extern int rmap_add_rec(struct xfs_mount *, xfs_ino_t, int, struct xfs_bmbt_irec *);
+extern int rmap_add_rec(struct xfs_mount *, xfs_ino_t, int,
+		struct xfs_bmbt_irec *, bool realtime);
 extern int rmap_finish_collecting_fork_recs(struct xfs_mount *mp,
 		xfs_agnumber_t agno);
 extern int rmap_add_ag_rec(struct xfs_mount *, xfs_agnumber_t agno,
@@ -62,5 +63,12 @@ extern int fix_inode_reflink_flags(struct xfs_mount *, xfs_agnumber_t);
 
 extern void fix_freelist(struct xfs_mount *, xfs_agnumber_t, bool);
 extern void rmap_store_agflcount(struct xfs_mount *, xfs_agnumber_t, int);
+
+#define for_each_ag(mp, agno) \
+	for ((agno) = 0; (agno) < (mp)->m_sb.sb_agcount; (agno)++)
+
+#define for_each_rmap_group(mp, agno) \
+	for ((agno) = NULLAGNUMBER; (agno) == NULLAGNUMBER || \
+	(agno) < (mp)->m_sb.sb_agcount; (agno)++)
 
 #endif /* RMAP_H_ */

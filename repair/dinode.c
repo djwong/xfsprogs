@@ -808,7 +808,7 @@ _("illegal state %d in block map %" PRIu64 "\n"),
 			}
 		}
 		if (collect_rmaps) { /* && !check_dups */
-			error = rmap_add_rec(mp, ino, whichfork, &irec);
+			error = rmap_add_rec(mp, ino, whichfork, &irec, false);
 			if (error)
 				do_error(
 _("couldn't add reverse mapping\n")

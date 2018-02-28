@@ -294,14 +294,17 @@ init_bmaps(xfs_mount_t *mp)
 	if (!ag_bmap)
 		do_error(_("couldn't allocate block map btree roots\n"));
 
-	ag_locks = calloc(mp->m_sb.sb_agcount, sizeof(struct aglock));
+	ag_locks = calloc(mp->m_sb.sb_agcount + 1, sizeof(struct aglock));
 	if (!ag_locks)
 		do_error(_("couldn't allocate block map locks\n"));
 
+	/* One ag_lock per AG, and one more for the realtime device. */
 	for (i = 0; i < mp->m_sb.sb_agcount; i++)  {
 		btree_init(&ag_bmap[i]);
 		pthread_mutex_init(&ag_locks[i].lock, NULL);
 	}
+	pthread_mutex_init(&ag_locks[mp->m_sb.sb_agcount].lock, NULL);
+	ag_locks++;
 
 	init_rt_bmap(mp);
 	reset_bmaps(mp);
@@ -311,6 +314,10 @@ void
 free_bmaps(xfs_mount_t *mp)
 {
 	xfs_agnumber_t i;
+
+	ag_locks--;
+	free(ag_locks);
+	ag_locks = NULL;
 
 	for (i = 0; i < mp->m_sb.sb_agcount; i++)
 		btree_destroy(ag_bmap[i]);
