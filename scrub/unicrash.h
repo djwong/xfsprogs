@@ -23,7 +23,7 @@
 struct unicrash;
 
 /* Unicode name collision detection. */
-#ifdef HAVE_U8NORMALIZE
+#ifdef HAVE_LIBICU
 
 struct dirent;
 
@@ -42,6 +42,6 @@ bool unicrash_check_xattr_name(struct unicrash *uc, const char *descr,
 # define unicrash_free(u)			do {(u) = (u);} while (0)
 # define unicrash_check_dir_name(u, d, n)	(true)
 # define unicrash_check_xattr_name(u, d, n)	(true)
-#endif /* HAVE_U8NORMALIZE */
+#endif /* HAVE_LIBICU */
 
 #endif /* XFS_SCRUB_UNICRASH_H_ */

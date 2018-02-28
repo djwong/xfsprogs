@@ -23,8 +23,9 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/statvfs.h>
-#include <unistr.h>
-#include <uninorm.h>
+#include <strings.h>
+#include <unicode/ustring.h>
+#include <unicode/unorm2.h>
 #include "path.h"
 #include "xfs_scrub.h"
 #include "common.h"
@@ -63,7 +64,7 @@ struct name_entry {
 	struct name_entry	*next;
 
 	/* NFKC normalized name */
-	uint8_t			*normstr;
+	UChar			*normstr;
 	size_t			normstrlen;
 
 	xfs_ino_t		ino;
@@ -77,6 +78,7 @@ struct name_entry {
 
 struct unicrash {
 	struct scrub_ctx	*ctx;
+	const UNormalizer2	*normalizer;
 	bool			compare_ino;
 	size_t			nr_buckets;
 	struct name_entry	*buckets[0];
@@ -135,23 +137,48 @@ name_entry_compute_checknames(
 	struct unicrash		*uc,
 	struct name_entry	*entry)
 {
-	uint8_t			*normstr;
-	size_t			normstrlen;
+	UChar			*normstr;
+	UChar			*unistr;
+	int32_t			normstrlen;
+	int32_t			unistrlen;
+	UErrorCode		uerr = U_ZERO_ERROR;
 
-	normstrlen = (entry->namelen * 2) + 1;
-	normstr = calloc(normstrlen, sizeof(uint8_t));
-	if (!normstr)
+	/* Convert bytestr to unistr for normalization */
+	u_strFromUTF8(NULL, 0, &unistrlen, entry->name, entry->namelen, &uerr);
+	if (uerr != U_BUFFER_OVERFLOW_ERROR)
 		return false;
+	uerr = U_ZERO_ERROR;
+	unistr = calloc(unistrlen + 1, sizeof(UChar));
+	if (!unistr)
+		return false;
+	u_strFromUTF8(unistr, unistrlen, NULL, entry->name, entry->namelen,
+			&uerr);
+	if (U_FAILURE(uerr))
+		goto out_unistr;
 
-	if (!u8_normalize(UNINORM_NFKC, (const uint8_t *)entry->name,
-			entry->namelen, normstr, &normstrlen));
+	/* Normalize the string. */
+	normstrlen = unorm2_normalize(uc->normalizer, unistr, unistrlen, NULL,
+			0, &uerr);
+	if (uerr != U_BUFFER_OVERFLOW_ERROR)
+		goto out_unistr;
+	uerr = U_ZERO_ERROR;
+	normstr = calloc(normstrlen + 1, sizeof(UChar));
+	if (!normstr)
+		goto out_unistr;
+	unorm2_normalize(uc->normalizer, unistr, unistrlen, normstr, normstrlen,
+			&uerr);
+	if (U_FAILURE(uerr))
 		goto out_normstr;
 
 	entry->normstr = normstr;
 	entry->normstrlen = normstrlen;
+	free(unistr);
 	return true;
+
 out_normstr:
 	free(normstr);
+out_unistr:
+	free(unistr);
 	return false;
 }
 
@@ -214,8 +241,8 @@ name_entry_hash(
 	size_t			namelen;
 	xfs_dahash_t		hash;
 
-	name = entry->normstr;
-	namelen = entry->normstrlen;
+	name = (uint8_t *)entry->normstr;
+	namelen = entry->normstrlen * sizeof(UChar);
 
 	/*
 	 * Do four characters at a time as long as we can.
@@ -249,6 +276,7 @@ unicrash_init(
 	size_t			nr_buckets)
 {
 	struct unicrash		*p;
+	UErrorCode		uerr = U_ZERO_ERROR;
 
 	if (!is_utf8_locale()) {
 		*ucp = NULL;
@@ -266,9 +294,15 @@ unicrash_init(
 	p->ctx = ctx;
 	p->nr_buckets = nr_buckets;
 	p->compare_ino = compare_ino;
+	p->normalizer = unorm2_getNFKCInstance(&uerr);
+	if (U_FAILURE(uerr))
+		goto out_free;
 	*ucp = p;
 
 	return true;
+out_free:
+	free(p);
+	return false;
 }
 
 /* Initialize the collision detector for a directory. */
@@ -378,7 +412,7 @@ unicrash_add(
 	while (entry != NULL) {
 		/* Same normalization? */
 		if (new_entry->normstrlen == entry->normstrlen &&
-		    !u8_strcmp(new_entry->normstr, entry->normstr) &&
+		    !u_strcmp(new_entry->normstr, entry->normstr) &&
 		    (uc->compare_ino ? entry->ino != new_entry->ino : true)) {
 			*badflags |= UNICRASH_NOT_UNIQUE;
 			*existing_entry = entry;

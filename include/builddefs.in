@@ -36,7 +36,6 @@ LIBEDITLINE = @libeditline@
 LIBREADLINE = @libreadline@
 LIBBLKID = @libblkid@
 LIBDEVMAPPER = @libdevmapper@
-LIBUNISTRING = @libunistring@
 LIBXFS = $(TOPDIR)/libxfs/libxfs.la
 LIBFROG = $(TOPDIR)/libfrog/libfrog.la
 LIBXCMD = $(TOPDIR)/libxcmd/libxcmd.la
@@ -122,7 +121,7 @@ HAVE_MAP_SYNC = @have_map_sync@
 HAVE_DEVMAPPER = @have_devmapper@
 HAVE_MALLINFO = @have_mallinfo@
 HAVE_LIBATTR = @have_libattr@
-HAVE_U8NORMALIZE = @have_u8normalize@
+HAVE_LIBICU = @have_libicu@
 HAVE_OPENAT = @have_openat@
 HAVE_FSTATAT = @have_fstatat@
 HAVE_SG_IO = @have_sg_io@
@@ -172,6 +171,9 @@ endif
 ifeq ($(HAVE_GETFSMAP),yes)
 PCFLAGS+= -DHAVE_GETFSMAP
 endif
+
+LIBICU_LIBS = @libicu_LIBS@
+LIBICU_CFLAGS = @libicu_CFLAGS@
 
 SANITIZER_CFLAGS += @addrsan_cflags@ @threadsan_cflags@ @ubsan_cflags@
 SANITIZER_LDFLAGS += @addrsan_ldflags@ @threadsan_ldflags@ @ubsan_ldflags@

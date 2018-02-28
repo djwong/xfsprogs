@@ -95,6 +95,11 @@ AC_ARG_ENABLE(lto,
 	enable_lto=probe)
 AC_SUBST(enable_lto)
 
+# Enable libicu for xfs_scrubbing of malicious unicode sequences in names
+AC_ARG_ENABLE(libicu,
+[ --enable-libicu=[yes/no]   Enable Unicode name scanning (libicu) [default=probe]],,
+	enable_libicu=probe)
+
 #
 # If the user specified a libdir ending in lib64 do not append another
 # 64 to the library names.
@@ -173,8 +178,12 @@ AC_HAVE_DEVMAPPER
 AC_HAVE_MALLINFO
 AC_PACKAGE_WANT_ATTRIBUTES_H
 AC_HAVE_LIBATTR
-AC_PACKAGE_WANT_UNINORM_H
-AC_HAVE_U8NORMALIZE
+if test "$enable_libicu" = "yes" || test "$enable_libicu" = "probe"; then
+	AC_HAVE_LIBICU
+fi
+if test "$enable_libicu" = "yes" && test "$have_libicu" != "yes"; then
+        AC_MSG_ERROR([libicu not found.])
+fi
 AC_HAVE_OPENAT
 AC_HAVE_FSTATAT
 AC_HAVE_SG_IO
