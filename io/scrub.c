@@ -26,6 +26,7 @@
 #include "io.h"
 
 static struct cmdinfo scrub_cmd;
+static struct cmdinfo repair_cmd;
 
 /* Type info and names for the scrub types. */
 enum scrub_type {
@@ -249,4 +250,100 @@ scrub_init(void)
 	scrub_cmd.help = scrub_help;
 
 	add_command(&scrub_cmd);
+}
+
+static void
+repair_help(void)
+{
+	const struct scrub_descr	*d;
+	int				i;
+
+	printf(_(
+"\n"
+" Repairs a piece of XFS filesystem metadata.  The first argument is the type\n"
+" of metadata to examine.  Allocation group metadata types take one AG number\n"
+" as the second parameter.  Inode metadata types act on the currently open file\n"
+" or (optionally) take an inode number and generation number to act upon as\n"
+" the second and third parameters.\n"
+"\n"
+" Example:\n"
+" 'repair inobt 3' - repairs the inode btree in AG 3.\n"
+" 'repair bmapbtd 128 13525' - repairs the extent map of inode 128 gen 13525.\n"
+"\n"
+" Known metadata repairs types are:"));
+	for (i = 0, d = scrubbers; i < XFS_SCRUB_TYPE_NR; i++, d++)
+		printf(" %s", d->name);
+	printf("\n");
+}
+
+static void
+repair_ioctl(
+	int				fd,
+	int				type,
+	uint64_t			control,
+	uint32_t			control2)
+{
+	struct xfs_scrub_metadata	meta;
+	const struct scrub_descr	*sc;
+	int				error;
+
+	sc = &scrubbers[type];
+	memset(&meta, 0, sizeof(meta));
+	meta.sm_type = type;
+	switch (sc->type) {
+	case ST_PERAG:
+		meta.sm_agno = control;
+		break;
+	case ST_INODE:
+		meta.sm_ino = control;
+		meta.sm_gen = control2;
+		break;
+	case ST_NONE:
+	case ST_FS:
+		/* no control parameters */
+		break;
+	}
+	meta.sm_flags = XFS_SCRUB_IFLAG_REPAIR;
+
+	error = ioctl(fd, XFS_IOC_SCRUB_METADATA, &meta);
+	if (error)
+		perror("scrub");
+	if (meta.sm_flags & XFS_SCRUB_OFLAG_CORRUPT)
+		printf(_("Corruption remains.\n"));
+	if (meta.sm_flags & XFS_SCRUB_OFLAG_PREEN)
+		printf(_("Optimization possible.\n"));
+	if (meta.sm_flags & XFS_SCRUB_OFLAG_XFAIL)
+		printf(_("Cross-referencing failed.\n"));
+	if (meta.sm_flags & XFS_SCRUB_OFLAG_XCORRUPT)
+		printf(_("Corruption still detected during cross-referencing.\n"));
+	if (meta.sm_flags & XFS_SCRUB_OFLAG_INCOMPLETE)
+		printf(_("Repair was not complete.\n"));
+	if (meta.sm_flags & XFS_SCRUB_OFLAG_UNTOUCHED)
+		printf(_("Metadata did not need repair or optimization.\n"));
+}
+
+static int
+repair_f(
+	int				argc,
+	char				**argv)
+{
+	return parse_args(argc, argv, &repair_cmd, repair_ioctl);
+}
+
+void
+repair_init(void)
+{
+	if (!expert)
+		return;
+	repair_cmd.name = "repair";
+	repair_cmd.altname = "fix";
+	repair_cmd.cfunc = repair_f;
+	repair_cmd.argmin = 1;
+	repair_cmd.argmax = -1;
+	repair_cmd.flags = CMD_NOMAP_OK;
+	repair_cmd.args = _("type [agno|ino gen]");
+	repair_cmd.oneline = _("repairs filesystem metadata");
+	repair_cmd.help = repair_help;
+
+	add_command(&repair_cmd);
 }

@@ -1157,6 +1157,14 @@ inode number and generation number are specified.
 .RE
 .PD
 .TP
+.BI "repair " type " [ " agnumber " | " "ino" " " "gen" " ]"
+Repair internal XFS filesystem metadata.  The
+.BI type
+parameter specifies which type of metadata to repair.
+For AG metadata, one AG number must be specified.
+For file metadata, the repair is applied to the open file unless the
+inode number and generation number are specified.
+.TP
 .BI "log_writes \-d " device " \-m "  mark
 Create a mark named
 .I mark

@@ -195,3 +195,4 @@ extern void		log_writes_init(void);
 #endif
 
 extern void		scrub_init(void);
+extern void		repair_init(void);

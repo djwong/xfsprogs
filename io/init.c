@@ -84,6 +84,7 @@ init_commands(void)
 	quit_init();
 	readdir_init();
 	reflink_init();
+	repair_init();
 	resblks_init();
 	scrub_init();
 	seek_init();
