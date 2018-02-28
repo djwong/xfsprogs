@@ -1,6 +1,6 @@
 .TH xfs_scrub 8
 .SH NAME
-xfs_scrub \- check the contents of a mounted XFS filesystem
+xfs_scrub \- check and repair the contents of a mounted XFS filesystem
 .SH SYNOPSIS
 .B xfs_scrub
 [
@@ -108,10 +108,40 @@ Optimizations supported by this program include, but are not limited to:
 Instructing the underlying storage to discard unused extents via the
 .B TRIM
 ioctl.
+.IP \[bu]
+Updating secondary superblocks to match the primary superblock.
+.IP \[bu]
+Turning off shared block write checks for files that no longer share blocks.
 .SH REPAIRS
-This program currently does not support making any repairs.
-Corruptions can only be fixed by unmounting the filesystem and running
-.BR xfs_repair (8).
+Repairs are performed by calling into the kernel.
+This limits the scope of repair activities to rebuilding primary data
+structures from secondary data structures, or secondary structures from
+primary structures.
+The existence of secondary data structures may require features that can
+only be turned on from
+.BR mkfs.xfs (8).
+If errors cannot be repaired, the filesystem must be
+unmounted and
+.BR xfs_repair (8)
+run.
+Repairs supported by the kernel include, but are not limited to:
+.IP \[bu] 2
+Reconstructing extent allocation data.
+.IP \[bu]
+Rebuilding free space information.
+.IP \[bu]
+Rebuilding inode indexes.
+.IP \[bu]
+Fixing minor corruptions of inode records.
+.IP \[bu]
+Recalculating reference count information.
+.IP \[bu]
+Reconstructing reverse mapping data from primary extent allocation data.
+.IP \[bu]
+Scheduling a quotacheck for the next mount.
+.PP
+If corrupt metadata is successfully repaired, this program will log that
+a repair has succeeded instead of a corruption report.
 .SH EXIT CODE
 The exit code returned by
 .B xfs_scrub

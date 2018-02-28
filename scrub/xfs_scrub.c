@@ -85,6 +85,15 @@
  * the previous two phases are retried here; if there are uncorrectable
  * errors, xfs_scrub stops here.
  *
+ * To perform the actual repairs (or optimizations), we iterate all the
+ * items on the per-AG action item list and ask the kernel to repair
+ * them.  Items which are successfully repaired are removed from the
+ * list.  If an item is not acted upon successfully (or the kernel asks us
+ * to try again), we retry the actions until there is nothing left to
+ * fix or we fail to make forward progress.  In that event, the
+ * unfinished items are recorded as errors.  If there are no errors at
+ * this point, we call FSTRIM on the filesystem.
+ *
  * The next phase is the "check directory tree" phase.  In this phase,
  * every directory is opened (via file handle) to confirm that each
  * directory is connected to the root.  Directory entries are checked
@@ -491,6 +500,27 @@ _("Scrub aborted after phase %d."),
 }
 
 static void
+report_modifications(
+	struct scrub_ctx	*ctx)
+{
+	if (ctx->repairs == 0 && ctx->preens == 0)
+		return;
+
+	if (ctx->repairs && ctx->preens)
+		fprintf(stdout,
+_("%s: repairs made: %llu; optimizations made: %llu.\n"),
+				ctx->mntpoint, ctx->repairs, ctx->preens);
+	else if (ctx->preens == 0)
+		fprintf(stdout,
+_("%s: repairs made: %llu.\n"),
+				ctx->mntpoint, ctx->repairs);
+	else if (ctx->repairs == 0)
+		fprintf(stdout,
+_("%s: optimizations made: %llu.\n"),
+				ctx->mntpoint, ctx->preens);
+}
+
+static void
 report_outcome(
 	struct scrub_ctx	*ctx)
 {
@@ -524,9 +554,16 @@ report_outcome(
 	 * setting up the scrub and we actually saw corruptions.  Warnings
 	 * are not corruptions.
 	 */
-	if (ctx->scrub_setup_succeeded && total_errors > 0)
-		fprintf(stderr, _("%s: Unmount and run xfs_repair.\n"),
-				ctx->mntpoint);
+	if (ctx->scrub_setup_succeeded && total_errors > 0) {
+		char		*msg;
+
+		if (ctx->mode == SCRUB_MODE_DRY_RUN)
+			msg = _("%s: Re-run xfs_scrub without -n.\n");
+		else
+			msg = _("%s: Unmount and run xfs_repair.\n");
+
+		fprintf(stderr, msg, ctx->mntpoint);
+	}
 }
 
 int
@@ -727,6 +764,7 @@ main(
 		ctx.runtime_errors++;
 
 out:
+	report_modifications(&ctx);
 	report_outcome(&ctx);
 
 	if (ctx.errors_found) {

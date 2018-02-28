@@ -30,6 +30,7 @@
 #include "inodes.h"
 #include "progress.h"
 #include "scrub.h"
+#include "repair.h"
 
 /* Phase 3: Scan all inodes. */
 
@@ -42,10 +43,11 @@ static bool
 xfs_scrub_fd(
 	struct scrub_ctx	*ctx,
 	bool			(*fn)(struct scrub_ctx *, uint64_t,
-				      uint32_t, int),
-	struct xfs_bstat	*bs)
+				      uint32_t, int, struct xfs_action_list *),
+	struct xfs_bstat	*bs,
+	struct xfs_action_list	*alist)
 {
-	return fn(ctx, bs->bs_ino, bs->bs_gen, ctx->mnt_fd);
+	return fn(ctx, bs->bs_ino, bs->bs_gen, ctx->mnt_fd, alist);
 }
 
 struct scrub_inode_ctx {
@@ -61,11 +63,15 @@ xfs_scrub_inode(
 	struct xfs_bstat	*bstat,
 	void			*arg)
 {
+	struct xfs_action_list	alist;
 	struct scrub_inode_ctx	*ictx = arg;
 	struct ptcounter	*icount = ictx->icount;
+	xfs_agnumber_t		agno;
 	bool			moveon = true;
 	int			fd = -1;
 
+	xfs_action_list_init(&alist);
+	agno = bstat->bs_ino / (1ULL << (ctx->inopblog + ctx->agblklog));
 	background_sleep();
 
 	/* Try to open the inode to pin it. */
@@ -77,45 +83,59 @@ xfs_scrub_inode(
 	}
 
 	/* Scrub the inode. */
-	moveon = xfs_scrub_fd(ctx, xfs_scrub_inode_fields, bstat);
+	moveon = xfs_scrub_fd(ctx, xfs_scrub_inode_fields, bstat, &alist);
+	if (!moveon)
+		goto out;
+
+	moveon = xfs_action_list_process_or_defer(ctx, agno, &alist);
 	if (!moveon)
 		goto out;
 
 	/* Scrub all block mappings. */
-	moveon = xfs_scrub_fd(ctx, xfs_scrub_data_fork, bstat);
+	moveon = xfs_scrub_fd(ctx, xfs_scrub_data_fork, bstat, &alist);
 	if (!moveon)
 		goto out;
-	moveon = xfs_scrub_fd(ctx, xfs_scrub_attr_fork, bstat);
+	moveon = xfs_scrub_fd(ctx, xfs_scrub_attr_fork, bstat, &alist);
 	if (!moveon)
 		goto out;
-	moveon = xfs_scrub_fd(ctx, xfs_scrub_cow_fork, bstat);
+	moveon = xfs_scrub_fd(ctx, xfs_scrub_cow_fork, bstat, &alist);
+	if (!moveon)
+		goto out;
+
+	moveon = xfs_action_list_process_or_defer(ctx, agno, &alist);
 	if (!moveon)
 		goto out;
 
 	if (S_ISLNK(bstat->bs_mode)) {
 		/* Check symlink contents. */
 		moveon = xfs_scrub_symlink(ctx, bstat->bs_ino,
-				bstat->bs_gen, ctx->mnt_fd);
+				bstat->bs_gen, ctx->mnt_fd, &alist);
 	} else if (S_ISDIR(bstat->bs_mode)) {
 		/* Check the directory entries. */
-		moveon = xfs_scrub_fd(ctx, xfs_scrub_dir, bstat);
+		moveon = xfs_scrub_fd(ctx, xfs_scrub_dir, bstat, &alist);
 	}
 	if (!moveon)
 		goto out;
 
 	/* Check all the extended attributes. */
-	moveon = xfs_scrub_fd(ctx, xfs_scrub_attr, bstat);
+	moveon = xfs_scrub_fd(ctx, xfs_scrub_attr, bstat, &alist);
 	if (!moveon)
 		goto out;
 
 	/* Check parent pointers. */
-	moveon = xfs_scrub_fd(ctx, xfs_scrub_parent, bstat);
+	moveon = xfs_scrub_fd(ctx, xfs_scrub_parent, bstat, &alist);
+	if (!moveon)
+		goto out;
+
+	/* Try to repair the file while it's open. */
+	moveon = xfs_action_list_process_or_defer(ctx, agno, &alist);
 	if (!moveon)
 		goto out;
 
 out:
 	ptcounter_add(icount, 1);
 	progress_add(1);
+	xfs_action_list_defer(ctx, agno, &alist);
 	if (fd >= 0)
 		close(fd);
 	if (!moveon)

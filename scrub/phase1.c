@@ -39,6 +39,7 @@
 #include "common.h"
 #include "disk.h"
 #include "scrub.h"
+#include "repair.h"
 
 /* Phase 1: Find filesystem geometry (and clean up after) */
 
@@ -60,6 +61,7 @@ bool
 xfs_cleanup_fs(
 	struct scrub_ctx	*ctx)
 {
+	xfs_action_lists_free(&ctx->action_lists);
 	if (ctx->fshandle)
 		free_handle(ctx->fshandle, ctx->fshandle_len);
 	if (ctx->rtdev)
@@ -145,6 +147,11 @@ _("Does not appear to be an XFS filesystem!"));
 	error = ioctl(ctx->mnt_fd, XFS_IOC_FSGEOMETRY, &ctx->geo);
 	if (error) {
 		str_errno(ctx, ctx->mntpoint);
+		return false;
+	}
+
+	if (!xfs_action_lists_alloc(ctx->geo.agcount, &ctx->action_lists)) {
+		str_error(ctx, ctx->mntpoint, _("Not enough memory."));
 		return false;
 	}
 

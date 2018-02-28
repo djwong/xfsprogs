@@ -40,6 +40,7 @@ fscounters.h \
 inodes.h \
 progress.h \
 read_verify.h \
+repair.h \
 scrub.h \
 spacemap.h \
 unicrash.h \
@@ -63,6 +64,7 @@ phase6.c \
 phase7.c \
 progress.c \
 read_verify.c \
+repair.c \
 scrub.c \
 spacemap.c \
 vfs.c \

@@ -31,6 +31,7 @@
 #include "progress.h"
 #include "scrub.h"
 #include "xfs_errortag.h"
+#include "repair.h"
 
 /* Online scrub and repair wrappers. */
 
@@ -317,12 +318,47 @@ _("Optimizations of %s are possible."), scrubbers[i].name);
 	}
 }
 
+/* Save a scrub context for later repairs. */
+bool
+xfs_scrub_save_repair(
+	struct scrub_ctx		*ctx,
+	struct xfs_action_list		*alist,
+	struct xfs_scrub_metadata	*meta)
+{
+	struct action_item		*aitem;
+
+	/* Schedule this item for later repairs. */
+	aitem = malloc(sizeof(struct action_item));
+	if (!aitem) {
+		str_errno(ctx, _("repair list"));
+		return false;
+	}
+	aitem->type = meta->sm_type;
+	aitem->flags = meta->sm_flags;
+	switch (scrubbers[meta->sm_type].type) {
+	case ST_AGHEADER:
+	case ST_PERAG:
+		aitem->agno = meta->sm_agno;
+		break;
+	case ST_INODE:
+		aitem->ino = meta->sm_ino;
+		aitem->gen = meta->sm_gen;
+		break;
+	default:
+		break;
+	}
+
+	xfs_action_list_add(alist, aitem);
+	return true;
+}
+
 /* Scrub metadata, saving corruption reports for later. */
 static bool
 xfs_scrub_metadata(
 	struct scrub_ctx		*ctx,
 	enum scrub_type			scrub_type,
-	xfs_agnumber_t			agno)
+	xfs_agnumber_t			agno,
+	struct xfs_action_list		*alist)
 {
 	struct xfs_scrub_metadata	meta = {0};
 	const struct scrub_descr	*sc;
@@ -346,6 +382,8 @@ xfs_scrub_metadata(
 		case CHECK_ABORT:
 			return false;
 		case CHECK_REPAIR:
+			if (!xfs_scrub_save_repair(ctx, alist, &meta))
+				return false;
 			/* fall through */
 		case CHECK_DONE:
 			continue;
@@ -365,7 +403,8 @@ xfs_scrub_metadata(
  */
 bool
 xfs_scrub_primary_super(
-	struct scrub_ctx		*ctx)
+	struct scrub_ctx		*ctx,
+	struct xfs_action_list		*alist)
 {
 	struct xfs_scrub_metadata	meta = {
 		.sm_type = XFS_SCRUB_TYPE_SB,
@@ -378,6 +417,8 @@ xfs_scrub_primary_super(
 	case CHECK_ABORT:
 		return false;
 	case CHECK_REPAIR:
+		if (!xfs_scrub_save_repair(ctx, alist, &meta))
+			return false;
 		/* fall through */
 	case CHECK_DONE:
 		return true;
@@ -393,26 +434,29 @@ xfs_scrub_primary_super(
 bool
 xfs_scrub_ag_headers(
 	struct scrub_ctx		*ctx,
-	xfs_agnumber_t			agno)
+	xfs_agnumber_t			agno,
+	struct xfs_action_list		*alist)
 {
-	return xfs_scrub_metadata(ctx, ST_AGHEADER, agno);
+	return xfs_scrub_metadata(ctx, ST_AGHEADER, agno, alist);
 }
 
 /* Scrub each AG's metadata btrees. */
 bool
 xfs_scrub_ag_metadata(
 	struct scrub_ctx		*ctx,
-	xfs_agnumber_t			agno)
+	xfs_agnumber_t			agno,
+	struct xfs_action_list		*alist)
 {
-	return xfs_scrub_metadata(ctx, ST_PERAG, agno);
+	return xfs_scrub_metadata(ctx, ST_PERAG, agno, alist);
 }
 
 /* Scrub whole-FS metadata btrees. */
 bool
 xfs_scrub_fs_metadata(
-	struct scrub_ctx		*ctx)
+	struct scrub_ctx		*ctx,
+	struct xfs_action_list		*alist)
 {
-	return xfs_scrub_metadata(ctx, ST_FS, 0);
+	return xfs_scrub_metadata(ctx, ST_FS, 0, alist);
 }
 
 /* How many items do we have to check? */
@@ -448,7 +492,8 @@ __xfs_scrub_file(
 	uint64_t			ino,
 	uint32_t			gen,
 	int				fd,
-	unsigned int			type)
+	unsigned int			type,
+	struct xfs_action_list		*alist)
 {
 	struct xfs_scrub_metadata	meta = {0};
 	enum check_outcome		fix;
@@ -467,7 +512,7 @@ __xfs_scrub_file(
 	if (fix == CHECK_DONE)
 		return true;
 
-	return true;
+	return xfs_scrub_save_repair(ctx, alist, &meta);
 }
 
 bool
@@ -475,9 +520,10 @@ xfs_scrub_inode_fields(
 	struct scrub_ctx	*ctx,
 	uint64_t		ino,
 	uint32_t		gen,
-	int			fd)
+	int			fd,
+	struct xfs_action_list	*alist)
 {
-	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_INODE);
+	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_INODE, alist);
 }
 
 bool
@@ -485,9 +531,10 @@ xfs_scrub_data_fork(
 	struct scrub_ctx	*ctx,
 	uint64_t		ino,
 	uint32_t		gen,
-	int			fd)
+	int			fd,
+	struct xfs_action_list	*alist)
 {
-	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_BMBTD);
+	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_BMBTD, alist);
 }
 
 bool
@@ -495,9 +542,10 @@ xfs_scrub_attr_fork(
 	struct scrub_ctx	*ctx,
 	uint64_t		ino,
 	uint32_t		gen,
-	int			fd)
+	int			fd,
+	struct xfs_action_list	*alist)
 {
-	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_BMBTA);
+	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_BMBTA, alist);
 }
 
 bool
@@ -505,9 +553,10 @@ xfs_scrub_cow_fork(
 	struct scrub_ctx	*ctx,
 	uint64_t		ino,
 	uint32_t		gen,
-	int			fd)
+	int			fd,
+	struct xfs_action_list	*alist)
 {
-	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_BMBTC);
+	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_BMBTC, alist);
 }
 
 bool
@@ -515,9 +564,10 @@ xfs_scrub_dir(
 	struct scrub_ctx	*ctx,
 	uint64_t		ino,
 	uint32_t		gen,
-	int			fd)
+	int			fd,
+	struct xfs_action_list	*alist)
 {
-	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_DIR);
+	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_DIR, alist);
 }
 
 bool
@@ -525,9 +575,10 @@ xfs_scrub_attr(
 	struct scrub_ctx	*ctx,
 	uint64_t		ino,
 	uint32_t		gen,
-	int			fd)
+	int			fd,
+	struct xfs_action_list	*alist)
 {
-	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_XATTR);
+	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_XATTR, alist);
 }
 
 bool
@@ -535,9 +586,10 @@ xfs_scrub_symlink(
 	struct scrub_ctx	*ctx,
 	uint64_t		ino,
 	uint32_t		gen,
-	int			fd)
+	int			fd,
+	struct xfs_action_list	*alist)
 {
-	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_SYMLINK);
+	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_SYMLINK, alist);
 }
 
 bool
@@ -545,9 +597,10 @@ xfs_scrub_parent(
 	struct scrub_ctx	*ctx,
 	uint64_t		ino,
 	uint32_t		gen,
-	int			fd)
+	int			fd,
+	struct xfs_action_list	*alist)
 {
-	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_PARENT);
+	return __xfs_scrub_file(ctx, ino, gen, fd, XFS_SCRUB_TYPE_PARENT, alist);
 }
 
 /* Test the availability of a kernel scrub command. */
@@ -663,7 +716,7 @@ enum check_outcome
 xfs_repair_metadata(
 	struct scrub_ctx		*ctx,
 	int				fd,
-	struct repair_item		*ri,
+	struct action_item		*aitem,
 	unsigned int			repair_flags)
 {
 	char				buf[DESCR_BUFSZ];
@@ -671,28 +724,24 @@ xfs_repair_metadata(
 	struct xfs_scrub_metadata	oldm;
 	int				error;
 
-	assert(ri->type < XFS_SCRUB_TYPE_NR);
+	assert(aitem->type < XFS_SCRUB_TYPE_NR);
 	assert(!debug_tweak_on("XFS_SCRUB_NO_KERNEL"));
-	meta.sm_type = ri->type;
-	meta.sm_flags = ri->flags | XFS_SCRUB_IFLAG_REPAIR;
-	switch (scrubbers[ri->type].type) {
+	meta.sm_type = aitem->type;
+	meta.sm_flags = aitem->flags | XFS_SCRUB_IFLAG_REPAIR;
+	switch (scrubbers[aitem->type].type) {
 	case ST_AGHEADER:
 	case ST_PERAG:
-		meta.sm_agno = ri->agno;
+		meta.sm_agno = aitem->agno;
 		break;
 	case ST_INODE:
-		meta.sm_ino = ri->ino;
-		meta.sm_gen = ri->gen;
+		meta.sm_ino = aitem->ino;
+		meta.sm_gen = aitem->gen;
 		break;
 	default:
 		break;
 	}
 
-	/*
-	 * If this is a preen operation but we're only repairing
-	 * critical items, defer the preening until later.
-	 */
-	if (!needs_repair(&meta) && (repair_flags & XRM_REPAIR_ONLY))
+	if (!is_corrupt(&meta) && (repair_flags & XRM_REPAIR_ONLY))
 		return CHECK_RETRY;
 
 	memcpy(&oldm, &meta, sizeof(oldm));
@@ -764,7 +813,7 @@ _("Read-only filesystem; cannot make changes."));
 		xfs_scrub_warn_incomplete_scrub(ctx, buf, &meta);
 	if (needs_repair(&meta)) {
 		/* Still broken, try again or fix offline. */
-		if (repair_flags & XRM_NOFIX_COMPLAIN)
+		if ((repair_flags & XRM_NOFIX_COMPLAIN) || debug)
 			str_error(ctx, buf,
 _("Repair unsuccessful; offline repair required."));
 	} else {
