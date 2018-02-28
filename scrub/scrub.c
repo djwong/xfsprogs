@@ -98,6 +98,8 @@ static const struct scrub_descr scrubbers[XFS_SCRUB_TYPE_NR] = {
 		{"group quotas",			ST_FS},
 	[XFS_SCRUB_TYPE_PQUOTA] =
 		{"project quotas",			ST_FS},
+	[XFS_SCRUB_TYPE_RTRMAPBT] =
+		{"realtime reverse mapping btree",	ST_FS},
 };
 
 /* Format a scrub description. */

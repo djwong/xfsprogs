@@ -93,6 +93,7 @@ xfs_action_item_priority(
 		return PRIO(aitem, XFS_SCRUB_TYPE_DIR);
 	case XFS_SCRUB_TYPE_RTBITMAP:
 	case XFS_SCRUB_TYPE_RTSUM:
+	case XFS_SCRUB_TYPE_RTRMAPBT:
 		return PRIO(aitem, XFS_SCRUB_TYPE_RTBITMAP);
 	case XFS_SCRUB_TYPE_UQUOTA:
 	case XFS_SCRUB_TYPE_GQUOTA:
