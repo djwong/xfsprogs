@@ -50,6 +50,8 @@ union xfs_btree_key {
 	struct xfs_rmap_key		rmap;
 	struct xfs_rmap_key		__rmap_bigkey[2];
 	struct xfs_refcount_key		refc;
+	struct xfs_rtrmap_key		rtrmap;
+	struct xfs_rtrmap_key		__rtrmap_bigkey[2];
 };
 
 union xfs_btree_rec {
@@ -59,6 +61,7 @@ union xfs_btree_rec {
 	struct xfs_inobt_rec		inobt;
 	struct xfs_rmap_rec		rmap;
 	struct xfs_refcount_rec		refc;
+	struct xfs_rtrmap_rec		rtrmap;
 };
 
 /*

@@ -1458,6 +1458,54 @@ typedef __be32 xfs_rmap_ptr_t;
 #define	XFS_RTRMAP_CRC_MAGIC	0x4d415052	/* 'MAPR' */
 
 /*
+ * Data record structure
+ */
+struct xfs_rtrmap_rec {
+	__be64		rm_startblock;	/* extent start block */
+	__be64		rm_blockcount;	/* extent length */
+	__be64		rm_owner;	/* extent owner */
+	__be64		rm_offset;	/* offset within the owner */
+};
+
+/* rm_offset has the same values as the regular rmapbt. */
+#define XFS_RTRMAP_OFF_ATTR_FORK	XFS_RMAP_OFF_ATTR_FORK
+#define XFS_RTRMAP_OFF_BMBT_BLOCK	XFS_RMAP_OFF_BMBT_BLOCK
+#define XFS_RTRMAP_OFF_UNWRITTEN	XFS_RMAP_OFF_UNWRITTEN
+
+#define XFS_RTRMAP_LEN_MAX		((uint64_t)~0U)
+#define XFS_RTRMAP_OFF_FLAGS		XFS_RMAP_OFF_FLAGS
+#define XFS_RTRMAP_OFF_MASK		XFS_RMAP_OFF_MASK
+
+#define XFS_RTRMAP_OFF			XFS_RMAP_OFF
+
+#define XFS_RTRMAP_IS_BMBT_BLOCK(off)	XFS_RMAP_IS_BMBT_BLOCK
+#define XFS_RTRMAP_IS_ATTR_FORK(off)	XFS_RMAP_IS_ATTR_FORK
+#define XFS_RTRMAP_IS_UNWRITTEN(len)	XFS_RMAP_IS_UNWRITTEN
+
+#define RTRMAPBT_STARTBLOCK_BITLEN	64
+#define RTRMAPBT_BLOCKCOUNT_BITLEN	64
+#define RTRMAPBT_OWNER_BITLEN		RMAPBT_OWNER_BITLEN
+#define RTRMAPBT_ATTRFLAG_BITLEN	RMAPBT_ATTRFLAG_BITLEN
+#define RTRMAPBT_BMBTFLAG_BITLEN	RMAPBT_BMBTFLAG_BITLEN
+#define RTRMAPBT_EXNTFLAG_BITLEN	RMAPBT_EXNTFLAG_BITLEN
+#define RTRMAPBT_UNUSED_OFFSET_BITLEN	RMAPBT_UNUSED_OFFSET_BITLEN
+#define RTRMAPBT_OFFSET_BITLEN		RMAPBT_OFFSET_BITLEN
+
+/*
+ * Key structure
+ *
+ * We don't use the length for lookups
+ */
+struct xfs_rtrmap_key {
+	__be64		rm_startblock;	/* extent start block */
+	__be64		rm_owner;	/* extent owner */
+	__be64		rm_offset;	/* offset within the owner */
+} __attribute__((packed));
+
+/* btree pointer type */
+typedef __be64 xfs_rtrmap_ptr_t;
+
+/*
  * Reference Count Btree format definitions
  *
  */
