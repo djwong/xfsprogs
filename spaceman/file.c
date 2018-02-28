@@ -84,6 +84,8 @@ openfile(
 			return -1;
 		}
 		memcpy(fs_path, fsp, sizeof(struct fs_path));
+	} else {
+		memset(fs_path, 0, sizeof(struct fs_path));
 	}
 	return fd;
 }

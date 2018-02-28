@@ -42,5 +42,6 @@ extern void	freesp_init(void);
 #else
 # define freesp_init()	do { } while (0)
 #endif
+extern void	info_init(void);
 
 #endif /* XFS_SPACEMAN_SPACE_H_ */
