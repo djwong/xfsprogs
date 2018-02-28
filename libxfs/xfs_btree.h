@@ -252,6 +252,7 @@ typedef struct xfs_btree_cur
 #define XFS_BTREE_LASTREC_UPDATE	(1<<2)	/* track last rec externally */
 #define XFS_BTREE_CRC_BLOCKS		(1<<3)	/* uses extended btree blocks */
 #define XFS_BTREE_OVERLAPPING		(1<<4)	/* overlapping intervals */
+#define XFS_BTREE_IROOT_RECORDS		(1<<5)	/* iroot can store records */
 
 
 #define	XFS_BTREE_NOERROR	0
