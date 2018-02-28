@@ -200,13 +200,14 @@ xfs_rmap_update_finish_item(
 	int				error;
 
 	rmap = container_of(item, struct xfs_rmap_intent, ri_list);
-	error = xfs_rmap_finish_one(tp,
+	error = xfs_rmap_finish_one(tp, dop,
 			rmap->ri_type,
 			rmap->ri_owner, rmap->ri_whichfork,
 			rmap->ri_bmap.br_startoff,
 			rmap->ri_bmap.br_startblock,
 			rmap->ri_bmap.br_blockcount,
 			rmap->ri_bmap.br_state,
+			rmap->ri_realtime,
 			(struct xfs_btree_cur **)state);
 	kmem_free(rmap);
 	return error;
