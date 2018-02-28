@@ -3387,7 +3387,7 @@ initialise_ag_headers(
 	}
 
 	agf->agf_flfirst = 0;
-	agf->agf_fllast = cpu_to_be32(XFS_AGFL_SIZE(mp) - 1);
+	agf->agf_fllast = cpu_to_be32(libxfs_agfl_size(mp) - 1);
 	agf->agf_flcount = 0;
 	agblocks = (xfs_agblock_t)(agsize - libxfs_prealloc_blocks(mp));
 	agf->agf_freeblks = cpu_to_be32(agblocks);
@@ -3419,7 +3419,7 @@ initialise_ag_headers(
 		agfl->agfl_magicnum = cpu_to_be32(XFS_AGFL_MAGIC);
 		agfl->agfl_seqno = cpu_to_be32(agno);
 		platform_uuid_copy(&agfl->agfl_uuid, &sbp->sb_uuid);
-		for (bucket = 0; bucket < XFS_AGFL_SIZE(mp); bucket++)
+		for (bucket = 0; bucket < libxfs_agfl_size(mp); bucket++)
 			agfl->agfl_bno[bucket] = cpu_to_be32(NULLAGBLOCK);
 	}
 

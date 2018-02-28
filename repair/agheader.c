@@ -91,18 +91,18 @@ verify_set_agf(xfs_mount_t *mp, xfs_agf_t *agf, xfs_agnumber_t i)
 	 * check first/last AGF fields.  if need be, lose the free
 	 * space in the AGFL, we'll reclaim it later.
 	 */
-	if (be32_to_cpu(agf->agf_flfirst) >= XFS_AGFL_SIZE(mp))  {
-		do_warn(_("flfirst %d in agf %d too large (max = %zu)\n"),
+	if (be32_to_cpu(agf->agf_flfirst) >= libxfs_agfl_size(mp))  {
+		do_warn(_("flfirst %d in agf %d too large (max = %u)\n"),
 			be32_to_cpu(agf->agf_flfirst),
-			i, XFS_AGFL_SIZE(mp) - 1);
+			i, libxfs_agfl_size(mp) - 1);
 		if (!no_modify)
 			agf->agf_flfirst = cpu_to_be32(0);
 	}
 
-	if (be32_to_cpu(agf->agf_fllast) >= XFS_AGFL_SIZE(mp))  {
-		do_warn(_("fllast %d in agf %d too large (max = %zu)\n"),
+	if (be32_to_cpu(agf->agf_fllast) >= libxfs_agfl_size(mp))  {
+		do_warn(_("fllast %d in agf %d too large (max = %u)\n"),
 			be32_to_cpu(agf->agf_fllast),
-			i, XFS_AGFL_SIZE(mp) - 1);
+			i, libxfs_agfl_size(mp) - 1);
 		if (!no_modify)
 			agf->agf_fllast = cpu_to_be32(0);
 	}

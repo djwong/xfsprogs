@@ -497,7 +497,7 @@ rmap_store_ag_btree_rec(
 	 */
 	agfl_bno = XFS_BUF_TO_AGFL_BNO(mp, agflbp);
 	b = agfl_bno + ag_rmaps[agno].ar_flcount;
-	while (*b != NULLAGBLOCK && b - agfl_bno < XFS_AGFL_SIZE(mp)) {
+	while (*b != NULLAGBLOCK && b - agfl_bno < libxfs_agfl_size(mp)) {
 		error = rmap_add_ag_rec(mp, agno, be32_to_cpu(*b), 1,
 				XFS_RMAP_OWN_AG);
 		if (error)

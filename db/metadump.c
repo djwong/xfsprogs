@@ -2611,7 +2611,7 @@ scan_ag(
 			i = be32_to_cpu(agf->agf_fllast);
 
 			for (;;) {
-				if (++i == XFS_AGFL_SIZE(mp))
+				if (++i == libxfs_agfl_size(mp))
 					i = 0;
 				if (i == be32_to_cpu(agf->agf_flfirst))
 					break;

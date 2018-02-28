@@ -69,7 +69,7 @@ agfl_bno_size(
 	void	*obj,
 	int	startoff)
 {
-	return XFS_AGFL_SIZE(mp);
+	return libxfs_agfl_size(mp);
 }
 
 static void

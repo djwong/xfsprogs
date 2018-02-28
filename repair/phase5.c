@@ -451,8 +451,8 @@ calculate_freespace_cursor(xfs_mount_t *mp, xfs_agnumber_t agno,
 	 * as they will be *after* accounting for the free space
 	 * we've used up will need fewer blocks to to represent
 	 * than we've allocated.  We can use the AGFL to hold
-	 * XFS_AGFL_SIZE (sector/xfs_agfl_t) blocks but that's it.
-	 * Thus we limit things to XFS_AGFL_SIZE/2 for each of the 2 btrees.
+	 * libxfs_agfl_size (sector/xfs_agfl_t) blocks but that's it.
+	 * Thus we limit things to libxfs_agfl_size/2 for each of the 2 btrees.
 	 * if the number of extra blocks is more than that,
 	 * we'll have to be called again.
 	 */
@@ -510,7 +510,7 @@ calculate_freespace_cursor(xfs_mount_t *mp, xfs_agnumber_t agno,
 			!= btree_curs->level[0].num_blocks)  {
 		/*
 		 * yes -- recalculate the cursor.  If the number of
-		 * excess (overallocated) blocks is < XFS_AGFL_SIZE/2, we're ok.
+		 * excess (overallocated) blocks is < libxfs_agfl_size/2, we're ok.
 		 * we can put those into the AGFL.  we don't try
 		 * and get things to converge exactly (reach a
 		 * state with zero excess blocks) because there
@@ -2060,7 +2060,7 @@ build_agf_agfl(
 		agfl->agfl_magicnum = cpu_to_be32(XFS_AGFL_MAGIC);
 		agfl->agfl_seqno = cpu_to_be32(agno);
 		platform_uuid_copy(&agfl->agfl_uuid, &mp->m_sb.sb_meta_uuid);
-		for (i = 0; i < XFS_AGFL_SIZE(mp); i++)
+		for (i = 0; i < libxfs_agfl_size(mp); i++)
 			agfl->agfl_bno[i] = cpu_to_be32(NULLAGBLOCK);
 	}
 	freelist = XFS_BUF_TO_AGFL_BNO(mp, agfl_buf);
@@ -2074,13 +2074,13 @@ build_agf_agfl(
 		 * yes, now grab as many blocks as we can
 		 */
 		i = 0;
-		while (bno_bt->num_free_blocks > 0 && i < XFS_AGFL_SIZE(mp))  {
+		while (bno_bt->num_free_blocks > 0 && i < libxfs_agfl_size(mp))  {
 			freelist[i] = cpu_to_be32(
 					get_next_blockaddr(agno, 0, bno_bt));
 			i++;
 		}
 
-		while (bcnt_bt->num_free_blocks > 0 && i < XFS_AGFL_SIZE(mp))  {
+		while (bcnt_bt->num_free_blocks > 0 && i < libxfs_agfl_size(mp))  {
 			freelist[i] = cpu_to_be32(
 					get_next_blockaddr(agno, 0, bcnt_bt));
 			i++;
@@ -2116,7 +2116,7 @@ _("Insufficient memory saving lost blocks.\n"));
 
 	} else  {
 		agf->agf_flfirst = 0;
-		agf->agf_fllast = cpu_to_be32(XFS_AGFL_SIZE(mp) - 1);
+		agf->agf_fllast = cpu_to_be32(libxfs_agfl_size(mp) - 1);
 		agf->agf_flcount = 0;
 	}
 
@@ -2311,8 +2311,8 @@ phase5_func(
 		/*
 		 * see if we can fit all the extra blocks into the AGFL
 		 */
-		extra_blocks = (extra_blocks - XFS_AGFL_SIZE(mp) > 0)
-				? extra_blocks - XFS_AGFL_SIZE(mp)
+		extra_blocks = (extra_blocks - libxfs_agfl_size(mp) > 0)
+				? extra_blocks - libxfs_agfl_size(mp)
 				: 0;
 
 		if (extra_blocks > 0)

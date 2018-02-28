@@ -4053,8 +4053,8 @@ scan_freelist(
 	i = be32_to_cpu(agf->agf_flfirst);
 
 	/* verify agf values before proceeding */
-	if (be32_to_cpu(agf->agf_flfirst) >= XFS_AGFL_SIZE(mp) ||
-	    be32_to_cpu(agf->agf_fllast) >= XFS_AGFL_SIZE(mp)) {
+	if (be32_to_cpu(agf->agf_flfirst) >= libxfs_agfl_size(mp) ||
+	    be32_to_cpu(agf->agf_fllast) >= libxfs_agfl_size(mp)) {
 		dbprintf(_("agf %d freelist blocks bad, skipping "
 			  "freelist scan\n"), i);
 		pop_cur();
@@ -4072,7 +4072,7 @@ scan_freelist(
 		count++;
 		if (i == be32_to_cpu(agf->agf_fllast))
 			break;
-		if (++i == XFS_AGFL_SIZE(mp))
+		if (++i == libxfs_agfl_size(mp))
 			i = 0;
 	}
 	if (count != be32_to_cpu(agf->agf_flcount)) {
