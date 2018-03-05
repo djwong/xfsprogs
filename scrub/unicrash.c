@@ -77,6 +77,14 @@ struct unicrash {
 #define UNICRASH_SZ(nr)		(sizeof(struct unicrash) + \
 				 (nr * sizeof(struct name_entry *)))
 
+/* Things to complain about in Unicode naming. */
+
+/*
+ * Multiple names resolve to the same normalized string and therefore render
+ * identically.
+ */
+#define UNICRASH_NOT_UNIQUE	(1 << 0)
+
 /*
  * We only care about validating utf8 collisions if the underlying
  * system configuration says we're using utf8.  If the language
@@ -256,7 +264,7 @@ unicrash_complain(
 	struct unicrash		*uc,
 	const char		*descr,
 	const char		*what,
-	bool			unique,
+	unsigned int		badflags,
 	const char		*name,
 	uint8_t			*uniname)
 {
@@ -266,11 +274,20 @@ unicrash_complain(
 	bad1 = string_escape(name);
 	bad2 = string_escape((char *)uniname);
 
-	if (!unique)
+	/*
+	 * Two names that normalize to the same string will render
+	 * identically even though the filesystem considers them unique
+	 * names.  "cafe\xcc\x81" and "caf\xc3\xa9" have different byte
+	 * sequences, but they both appear as "café".
+	 */
+	if (badflags & UNICRASH_NOT_UNIQUE) {
 		str_warn(uc->ctx, descr,
-_("Duplicate normalized Unicode name \"%s\" found in %s."),
-				bad1, what);
+_("Unicode name \"%s\" in %s renders identically to \"%s\"."),
+				bad1, what, bad2);
+		goto out;
+	}
 
+out:
 	free(bad1);
 	free(bad2);
 }
@@ -291,7 +308,7 @@ unicrash_add(
 	struct unicrash		*uc,
 	uint8_t			*uniname,
 	xfs_ino_t		ino,
-	bool			*unique)
+	unsigned int		*badflags)
 {
 	struct name_entry	*ne;
 	struct name_entry	*x;
@@ -304,8 +321,9 @@ unicrash_add(
 	hash = unicrash_hashname(uniname, uninamelen);
 	bucket = hash % uc->nr_buckets;
 	for (nep = &uc->buckets[bucket], ne = *nep; ne != NULL; ne = x) {
-		if (u8_strcmp(uniname, ne->uniname) == 0) {
-			*unique = uc->compare_ino ? ne->ino == ino : false;
+		if (u8_strcmp(uniname, ne->uniname) == 0 &&
+		    (uc->compare_ino ? ino != ne->ino : true)) {
+			*badflags |= UNICRASH_NOT_UNIQUE;
 			return true;
 		}
 		nep = &ne->next;
@@ -321,7 +339,6 @@ unicrash_add(
 	x->uninamelen = uninamelen;
 	memcpy(x->uniname, uniname, uninamelen + 1);
 	*nep = x;
-	*unique = true;
 
 	return true;
 }
@@ -336,19 +353,19 @@ __unicrash_check_name(
 	xfs_ino_t		ino)
 {
 	uint8_t			uniname[(NAME_MAX * 2) + 1];
+	unsigned int		badflags = 0;
 	bool			moveon;
-	bool			unique;
 
 	memset(uniname, 0, (NAME_MAX * 2) + 1);
 	unicrash_normalize(name, uniname, NAME_MAX * 2);
-	moveon = unicrash_add(uc, uniname, ino, &unique);
+	moveon = unicrash_add(uc, uniname, ino, &badflags);
 	if (!moveon)
 		return false;
 
-	if (unique)
-		return true;
+	if (badflags)
+		unicrash_complain(uc, descr, namedescr, badflags, name,
+				uniname);
 
-	unicrash_complain(uc, descr, namedescr, unique, name, uniname);
 	return true;
 }
 
