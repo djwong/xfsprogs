@@ -143,6 +143,8 @@ static const struct xfs_attr_ns attr_ns[] = {
 	{ATTR_SECURE,		"secure"},
 	{0, NULL},
 };
+/* Enough space to handle the prefix. */
+#define ATTR_NAME_MAX		(NAME_MAX + 8)
 
 /*
  * Check all the xattr names in a particular namespace of a file handle
@@ -158,7 +160,7 @@ xfs_scrub_scan_fhandle_namespace_xattrs(
 {
 	struct attrlist_cursor		cur;
 	char				attrbuf[XFS_XATTR_LIST_MAX];
-	char				keybuf[NAME_MAX + 1];
+	char				keybuf[ATTR_NAME_MAX + 1];
 	struct attrlist			*attrlist = (struct attrlist *)attrbuf;
 	struct attrlist_ent		*ent;
 	struct unicrash			*uc;
@@ -172,14 +174,14 @@ xfs_scrub_scan_fhandle_namespace_xattrs(
 
 	memset(attrbuf, 0, XFS_XATTR_LIST_MAX);
 	memset(&cur, 0, sizeof(cur));
-	memset(keybuf, 0, NAME_MAX + 1);
+	memset(keybuf, 0, ATTR_NAME_MAX + 1);
 	error = attr_list_by_handle(handle, sizeof(*handle), attrbuf,
 			XFS_XATTR_LIST_MAX, attr_ns->flags, &cur);
 	while (!error) {
 		/* Examine the xattrs. */
 		for (i = 0; i < attrlist->al_count; i++) {
 			ent = ATTR_ENTRY(attrlist, i);
-			snprintf(keybuf, NAME_MAX, "%s.%s", attr_ns->name,
+			snprintf(keybuf, ATTR_NAME_MAX, "%s.%s", attr_ns->name,
 					ent->a_name);
 			moveon = xfs_scrub_check_name(ctx, descr,
 					_("extended attribute"), keybuf);
