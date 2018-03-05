@@ -113,11 +113,11 @@ xfs_scrub_scan_dirents(
 
 	dentry = readdir(dir);
 	while (dentry) {
-		moveon = xfs_scrub_check_name(ctx, descr, _("directory"),
-				dentry->d_name);
-		if (!moveon)
-			break;
-		moveon = unicrash_check_dir_name(uc, descr, dentry);
+		if (uc)
+			moveon = unicrash_check_dir_name(uc, descr, dentry);
+		else
+			moveon = xfs_scrub_check_name(ctx, descr,
+					_("directory"), dentry->d_name);
 		if (!moveon)
 			break;
 		dentry = readdir(dir);
@@ -163,7 +163,7 @@ xfs_scrub_scan_fhandle_namespace_xattrs(
 	char				keybuf[ATTR_NAME_MAX + 1];
 	struct attrlist			*attrlist = (struct attrlist *)attrbuf;
 	struct attrlist_ent		*ent;
-	struct unicrash			*uc;
+	struct unicrash			*uc = NULL;
 	bool				moveon = true;
 	int				i;
 	int				error;
@@ -183,11 +183,13 @@ xfs_scrub_scan_fhandle_namespace_xattrs(
 			ent = ATTR_ENTRY(attrlist, i);
 			snprintf(keybuf, ATTR_NAME_MAX, "%s.%s", attr_ns->name,
 					ent->a_name);
-			moveon = xfs_scrub_check_name(ctx, descr,
-					_("extended attribute"), keybuf);
-			if (!moveon)
-				goto out;
-			moveon = unicrash_check_xattr_name(uc, descr, keybuf);
+			if (uc)
+				moveon = unicrash_check_xattr_name(uc, descr,
+						keybuf);
+			else
+				moveon = xfs_scrub_check_name(ctx, descr,
+						_("extended attribute"),
+						keybuf);
 			if (!moveon)
 				goto out;
 		}
