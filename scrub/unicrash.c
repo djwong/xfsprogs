@@ -256,7 +256,6 @@ unicrash_complain(
 	struct unicrash		*uc,
 	const char		*descr,
 	const char		*what,
-	bool			normal,
 	bool			unique,
 	const char		*name,
 	uint8_t			*uniname)
@@ -267,10 +266,6 @@ unicrash_complain(
 	bad1 = string_escape(name);
 	bad2 = string_escape((char *)uniname);
 
-	if (!normal && should_warn_about_name(uc->ctx))
-		str_info(uc->ctx, descr,
-_("Unicode name \"%s\" in %s should be normalized as \"%s\"."),
-				bad1, what, bad2);
 	if (!unique)
 		str_warn(uc->ctx, descr,
 _("Duplicate normalized Unicode name \"%s\" found in %s."),
@@ -342,20 +337,18 @@ __unicrash_check_name(
 {
 	uint8_t			uniname[(NAME_MAX * 2) + 1];
 	bool			moveon;
-	bool			normal;
 	bool			unique;
 
 	memset(uniname, 0, (NAME_MAX * 2) + 1);
-	normal = unicrash_normalize(name, uniname, NAME_MAX * 2);
+	unicrash_normalize(name, uniname, NAME_MAX * 2);
 	moveon = unicrash_add(uc, uniname, ino, &unique);
 	if (!moveon)
 		return false;
 
-	if (normal && unique)
+	if (unique)
 		return true;
 
-	unicrash_complain(uc, descr, namedescr, normal, unique, name,
-			uniname);
+	unicrash_complain(uc, descr, namedescr, unique, name, uniname);
 	return true;
 }
 
