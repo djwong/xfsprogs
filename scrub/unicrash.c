@@ -92,6 +92,7 @@ struct unicrash {
 	USpoofChecker		*spoof;
 	const UNormalizer2	*normalizer;
 	bool			compare_ino;
+	bool			is_only_root_writeable;
 	size_t			nr_buckets;
 	struct name_entry	*buckets[0];
 };
@@ -395,7 +396,8 @@ unicrash_init(
 	struct unicrash		**ucp,
 	struct scrub_ctx	*ctx,
 	bool			compare_ino,
-	size_t			nr_buckets)
+	size_t			nr_buckets,
+	bool			is_only_root_writeable)
 {
 	struct unicrash		*p;
 	UErrorCode		uerr = U_ZERO_ERROR;
@@ -425,6 +427,7 @@ unicrash_init(
 	uspoof_setChecks(p->spoof, USPOOF_ALL_CHECKS, &uerr);
 	if (U_FAILURE(uerr))
 		goto out_spoof;
+	p->is_only_root_writeable = is_only_root_writeable;
 	*ucp = p;
 
 	return true;
@@ -433,6 +436,20 @@ out_spoof:
 out_free:
 	free(p);
 	return false;
+}
+
+/*
+ * Is this inode owned by root and not writable by others?  If so, skip
+ * even the informational messages, because this was put in place by the
+ * administrator.
+ */
+static bool
+is_only_root_writable(
+	struct xfs_bstat	*bstat)
+{
+	if (bstat->bs_uid != 0 || bstat->bs_gid != 0)
+		return false;
+	return !(bstat->bs_mode & S_IWOTH);
 }
 
 /* Initialize the collision detector for a directory. */
@@ -446,7 +463,8 @@ unicrash_dir_init(
 	 * Assume 64 bytes per dentry, clamp buckets between 16 and 64k.
 	 * Same general idea as dir_hash_init in xfs_repair.
 	 */
-	return unicrash_init(ucp, ctx, true, bstat->bs_size / 64);
+	return unicrash_init(ucp, ctx, true, bstat->bs_size / 64,
+			is_only_root_writable(bstat));
 }
 
 /* Initialize the collision detector for an extended attribute. */
@@ -457,7 +475,8 @@ unicrash_xattr_init(
 	struct xfs_bstat	*bstat)
 {
 	/* Assume 16 attributes per extent for lack of a better idea. */
-	return unicrash_init(ucp, ctx, false, 16 * (1 + bstat->bs_aextents));
+	return unicrash_init(ucp, ctx, false, 16 * (1 + bstat->bs_aextents),
+			is_only_root_writable(bstat));
 }
 
 /* Free the crash detector. */
@@ -547,6 +566,15 @@ _("Unicode name \"%s\" in %s contains control characters."),
 				bad1, what);
 		goto out;
 	}
+
+	/*
+	 * Skip the informational messages if the inode owning the name is
+	 * only writeable by root, because those files were put there by the
+	 * sysadmin.  Also skip names less than four letters long because
+	 * there's a much higher chance of collisions with short names.
+	 */
+	if (!verbose && (uc->is_only_root_writeable || entry->namelen < 4))
+		goto out;
 
 	/*
 	 * It's not considered good practice (says Unicode) to mix LTR
