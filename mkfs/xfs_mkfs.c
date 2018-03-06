@@ -1996,7 +1996,7 @@ _("finobt not supported without CRC support\n"));
 		}
 		cli->sb_feat.finobt = false;
 
-		if (cli->sb_feat.spinodes) {
+		if (cli->sb_feat.spinodes && cli_opt_set(&iopts, I_SPINODES)) {
 			fprintf(stderr,
 _("sparse inodes not supported without CRC support\n"));
 			usage();
@@ -3811,7 +3811,7 @@ main(
 			.crcs_enabled = true,
 			.dirftype = true,
 			.finobt = true,
-			.spinodes = false,
+			.spinodes = true,
 			.rmapbt = false,
 			.reflink = false,
 			.parent_pointers = false,
