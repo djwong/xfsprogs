@@ -94,6 +94,18 @@ struct unicrash {
  */
 #define UNICRASH_NOT_UNIQUE	(1 << 0)
 
+/* Name contains directional overrides. */
+#define UNICRASH_BIDI_OVERRIDE	(1 << 1)
+
+/* Name mixes left-to-right and right-to-left characters. */
+#define UNICRASH_BIDI_MIXED	(1 << 2)
+
+/* Control characters in name. */
+#define UNICRASH_CONTROL_CHAR	(1 << 3)
+
+/* Invisible characters.  Only a problem if we have collisions. */
+#define UNICRASH_ZERO_WIDTH	(1 << 4)
+
 /*
  * We only care about validating utf8 collisions if the underlying
  * system configuration says we're using utf8.  If the language
@@ -267,6 +279,66 @@ name_entry_hash(
 	}
 }
 
+/*
+ * Check a name for suspicious elements that have appeared in filename
+ * spoofing attacks.  This includes names that mixed directions or contain
+ * direction overrides control characters, both of which have appeared in
+ * filename spoofing attacks.
+ */
+static void
+name_entry_examine(
+	struct name_entry	*entry,
+	unsigned int		*badflags)
+{
+	UChar32			uchr;
+	int32_t			i;
+	uint8_t			mask = 0;
+
+	for (i = 0; i < entry->normstrlen;) {
+		U16_NEXT_UNSAFE(entry->normstr, i, uchr);
+
+		/* zero width character sequences */
+		switch (uchr) {
+		case 0x200B:	/* zero width space */
+		case 0x200C:	/* zero width non-joiner */
+		case 0x200D:	/* zero width joiner */
+		case 0xFEFF:	/* zero width non breaking space */
+		case 0x2060:	/* word joiner */
+		case 0x2061:	/* function application */
+		case 0x2062:	/* invisible times (multiply) */
+		case 0x2063:	/* invisible separator (comma) */
+		case 0x2064:	/* invisible plus (addition) */
+			*badflags |= UNICRASH_ZERO_WIDTH;
+			break;
+		}
+
+		/* control characters */
+		if (u_iscntrl(uchr))
+			*badflags |= UNICRASH_CONTROL_CHAR;
+
+		switch (u_charDirection(uchr)) {
+		case U_LEFT_TO_RIGHT:
+			mask |= 0x01;
+			break;
+		case U_RIGHT_TO_LEFT:
+			mask |= 0x02;
+			break;
+		case U_RIGHT_TO_LEFT_OVERRIDE:
+			*badflags |= UNICRASH_BIDI_OVERRIDE;
+			break;
+		case U_LEFT_TO_RIGHT_OVERRIDE:
+			*badflags |= UNICRASH_BIDI_OVERRIDE;
+			break;
+		default:
+			break;
+		}
+	}
+
+	/* mixing left-to-right and right-to-left chars */
+	if (mask == 0x3)
+		*badflags |= UNICRASH_BIDI_MIXED;
+}
+
 /* Initialize the collision detector. */
 static bool
 unicrash_init(
@@ -369,6 +441,18 @@ unicrash_complain(
 		bad2 = string_escape(dup_entry->name);
 
 	/*
+	 * Most filechooser UIs do not look for bidirectional overrides when
+	 * they render names.  This can result in misleading name presentation
+	 * that makes "hig<rtl>gnp.sh" render like "highs.png".
+	 */
+	if (badflags & UNICRASH_BIDI_OVERRIDE) {
+		str_warn(uc->ctx, descr,
+_("Unicode name \"%s\" in %s contains suspicious text direction overrides."),
+				bad1, what);
+		goto out;
+	}
+
+	/*
 	 * Two names that normalize to the same string will render
 	 * identically even though the filesystem considers them unique
 	 * names.  "cafe\xcc\x81" and "caf\xc3\xa9" have different byte
@@ -378,6 +462,30 @@ unicrash_complain(
 		str_warn(uc->ctx, descr,
 _("Unicode name \"%s\" in %s renders identically to \"%s\"."),
 				bad1, what, bad2);
+		goto out;
+	}
+
+	/*
+	 * Unfiltered control characters can mess up your terminal and render
+	 * invisibly in filechooser UIs.
+	 */
+	if (badflags & UNICRASH_CONTROL_CHAR) {
+		str_warn(uc->ctx, descr,
+_("Unicode name \"%s\" in %s contains control characters."),
+				bad1, what);
+		goto out;
+	}
+
+	/*
+	 * It's not considered good practice (says Unicode) to mix LTR
+	 * characters with RTL characters.  The mere presence of different
+	 * bidirectional characters isn't enough to trip up software, so don't
+	 * warn about this too loudly.
+	 */
+	if (badflags & UNICRASH_BIDI_MIXED) {
+		str_info(uc->ctx, descr,
+_("Unicode name \"%s\" in %s mixes bidirectional characters."),
+				bad1, what);
 		goto out;
 	}
 
@@ -441,6 +549,8 @@ __unicrash_check_name(
 	/* If we can't create entry data, just skip it. */
 	if (!name_entry_create(uc, name, ino, &new_entry))
 		return true;
+
+	name_entry_examine(new_entry, &badflags);
 
 	moveon = unicrash_add(uc, new_entry, &badflags, &dup_entry);
 	if (!moveon)
