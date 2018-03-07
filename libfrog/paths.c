@@ -102,8 +102,11 @@ fs_table_lookup_mount(
 	uint		i;
 	dev_t		dev = 0;
 	char		rpath[PATH_MAX];
+	char		dpath[PATH_MAX];
 
 	if (fs_device_number(dir, &dev))
+		return NULL;
+	if (!realpath(dir, dpath))
 		return NULL;
 
 	for (i = 0; i < fs_count; i++) {
@@ -111,7 +114,7 @@ fs_table_lookup_mount(
 			continue;
 		if (!realpath(fs_table[i].fs_dir, rpath))
 			continue;
-		if (strcmp(rpath, dir) == 0)
+		if (strcmp(rpath, dpath) == 0)
 			return &fs_table[i];
 	}
 	return NULL;
