@@ -170,7 +170,7 @@ bool				is_service;
 static void __attribute__((noreturn))
 usage(void)
 {
-	fprintf(stderr, _("Usage: %s [OPTIONS] mountpoint | device\n"), progname);
+	fprintf(stderr, _("Usage: %s [OPTIONS] mountpoint\n"), progname);
 	fprintf(stderr, "\n");
 	fprintf(stderr, _("Options:\n"));
 	fprintf(stderr, _("  -a count     Stop after this many errors are found.\n"));
@@ -538,8 +538,8 @@ main(
 	struct phase_rusage	all_pi;
 	char			*mtab = NULL;
 	FILE			*progress_fp = NULL;
+	struct fs_path		*fsp;
 	bool			moveon = true;
-	bool			ismnt;
 	int			c;
 	int			fd;
 	int			ret = SCRUB_RET_SUCCESS;
@@ -640,7 +640,7 @@ main(
 	if (optind != argc - 1)
 		usage();
 
-	ctx.mntpoint = strdup(argv[optind]);
+	ctx.mntpoint = argv[optind];
 
 	stdout_isatty = isatty(STDOUT_FILENO);
 	stderr_isatty = isatty(STDERR_FILENO);
@@ -680,14 +680,15 @@ main(
 			mtab = _PATH_MOUNTED;
 	}
 
-	ismnt = find_mountpoint(mtab, &ctx);
-	if (!ismnt) {
-		fprintf(stderr,
-_("%s: Not a XFS mount point or block device.\n"),
-			ctx.mntpoint);
+	fs_table_initialise(0, NULL, 0, NULL);
+	fsp = fs_table_lookup_mount(ctx.mntpoint);
+	if (!fsp) {
+		fprintf(stderr, _("%s: Not a XFS mount point.\n"),
+				ctx.mntpoint);
 		ret |= SCRUB_RET_SYNTAX;
 		goto out;
 	}
+	memcpy(&ctx.fsinfo, fsp, sizeof(struct fs_path));
 
 	/* How many CPUs? */
 	nproc = sysconf(_SC_NPROCESSORS_ONLN);
@@ -740,8 +741,6 @@ out:
 	phase_end(&all_pi, 0);
 	if (progress_fp)
 		fclose(progress_fp);
-	free(ctx.blkdev);
-	free(ctx.mntpoint);
 
 	/*
 	 * If we're being run as a service, the return code must fit the LSB

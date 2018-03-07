@@ -48,7 +48,6 @@ struct scrub_ctx {
 
 	/* Strings we need for presentation */
 	char			*mntpoint;
-	char			*blkdev;
 
 	/* Mountpoint info */
 	struct stat		mnt_sb;

@@ -83,7 +83,6 @@ bool
 xfs_setup_fs(
 	struct scrub_ctx		*ctx)
 {
-	struct fs_path			*fsp;
 	int				error;
 
 	/*
@@ -177,17 +176,6 @@ _("Kernel metadata scrubbing facility is not available."));
 _("Kernel metadata repair facility is not available.  Use -n to scrub."));
 		return false;
 	}
-
-	/* Go find the XFS devices if we have a usable fsmap. */
-	fs_table_initialise(0, NULL, 0, NULL);
-	errno = 0;
-	fsp = fs_table_lookup(ctx->mntpoint, FS_MOUNT_POINT);
-	if (!fsp) {
-		str_info(ctx, ctx->mntpoint,
-_("Unable to find XFS information."));
-		return false;
-	}
-	memcpy(&ctx->fsinfo, fsp, sizeof(struct fs_path));
 
 	/* Did we find the log and rt devices, if they're present? */
 	if (ctx->geo.logstart == 0 && ctx->fsinfo.fs_log == NULL) {

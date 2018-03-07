@@ -88,7 +88,6 @@ static inline int syncfs(int fd)
 }
 #endif
 
-bool find_mountpoint(char *mtab, struct scrub_ctx *ctx);
 void background_sleep(void);
 char *string_escape(const char *in);
 
