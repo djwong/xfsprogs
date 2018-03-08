@@ -26,6 +26,7 @@ import threading
 import time
 import sys
 import os
+import argparse
 
 retcode = 0
 terminate = False
@@ -138,6 +139,16 @@ def main():
 		thr = threading.Thread(target = run_scrub, args = a)
 		thr.start()
 	global retcode, terminate
+
+	parser = argparse.ArgumentParser( \
+			description = "Scrub all mounted XFS filesystems.")
+	parser.add_argument("-V", help = "Report version and exit.", \
+			action = "store_true")
+	args = parser.parse_args()
+
+	if args.V:
+		print("xfs_scrub_all version @pkg_version@")
+		sys.exit(0)
 
 	fs = find_mounts()
 

@@ -3,6 +3,9 @@
 xfs_scrub_all \- scrub all mounted XFS filesystems
 .SH SYNOPSIS
 .B xfs_scrub_all
+[
+.B \-hV
+]
 .SH DESCRIPTION
 .B xfs_scrub_all
 attempts to read and check all the metadata on all mounted XFS filesystems.
@@ -13,6 +16,13 @@ in a restricted fashion.
 Mounted filesystems are mapped to physical storage devices so that scrub
 operations can be run in parallel so long as no two scrubbers access
 the same device simultaneously.
+.SH OPTIONS
+.TP
+.B \-h
+Display help.
+.TP
+.B \-V
+Prints the version number and exits.
 .SH EXIT CODE
 The exit code returned by
 .B xfs_scrub_all
