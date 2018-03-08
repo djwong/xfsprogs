@@ -150,5 +150,7 @@
 #define xfs_rmap_lookup_le_range	libxfs_rmap_lookup_le_range
 #define xfs_refc_block			libxfs_refc_block
 #define xfs_rmap_compare		libxfs_rmap_compare
+#define xfs_dir_get_ops			libxfs_dir_get_ops
+#define xfs_default_ifork_ops		libxfs_default_ifork_ops
 
 #endif /* __LIBXFS_API_DEFS_H__ */
