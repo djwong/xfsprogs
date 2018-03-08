@@ -7,7 +7,9 @@ include $(TOPDIR)/include/builddefs
 
 LTCOMMAND = xfs_fsr
 CFILES = xfs_fsr.c
-LLDLIBS = $(LIBHANDLE)
+LLDLIBS = $(LIBHANDLE) $(LIBFROG) $(LIBPTHREAD) $(LIBBLKID)
+LTDEPENDENCIES = $(LIBHANDLE) $(LIBFROG)
+LLDFLAGS = -static-libtool-libs
 
 ifeq ($(HAVE_GETMNTENT),yes)
 LCFLAGS += -DHAVE_GETMNTENT

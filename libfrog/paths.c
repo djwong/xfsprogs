@@ -89,6 +89,33 @@ fs_table_lookup(
 	return NULL;
 }
 
+static struct fs_path *
+__fs_table_lookup_mount(
+	const char	*dir,
+	const char	*blkdev)
+{
+	uint		i;
+	char		rpath[PATH_MAX];
+	char		dpath[PATH_MAX];
+
+	if (dir && !realpath(dir, dpath))
+		return NULL;
+	if (blkdev && !realpath(blkdev, dpath))
+		return NULL;
+
+	for (i = 0; i < fs_count; i++) {
+		if (fs_table[i].fs_flags != FS_MOUNT_POINT)
+			continue;
+		if (dir && !realpath(fs_table[i].fs_dir, rpath))
+			continue;
+		if (blkdev && !realpath(fs_table[i].fs_name, rpath))
+			continue;
+		if (strcmp(rpath, dpath) == 0)
+			return &fs_table[i];
+	}
+	return NULL;
+}
+
 /*
  * Find the FS table entry describing an actual mount for the given path.
  * Unlike fs_table_lookup(), fs_table_lookup_mount() compares the "dir"
@@ -99,25 +126,20 @@ struct fs_path *
 fs_table_lookup_mount(
 	const char	*dir)
 {
-	uint		i;
-	dev_t		dev = 0;
-	char		rpath[PATH_MAX];
-	char		dpath[PATH_MAX];
+	return __fs_table_lookup_mount(dir, NULL);
+}
 
-	if (fs_device_number(dir, &dev))
-		return NULL;
-	if (!realpath(dir, dpath))
-		return NULL;
-
-	for (i = 0; i < fs_count; i++) {
-		if (fs_table[i].fs_flags != FS_MOUNT_POINT)
-			continue;
-		if (!realpath(fs_table[i].fs_dir, rpath))
-			continue;
-		if (strcmp(rpath, dpath) == 0)
-			return &fs_table[i];
-	}
-	return NULL;
+/*
+ * Find the FS table entry describing an actual mount for the block device.
+ * Unlike fs_table_lookup(), fs_table_lookup_blkdev() compares the "bdev"
+ * argument to actual mount point names in the table. Accordingly, it
+ * will find matches only if the "bdev" argument is indeed mounted.
+ */
+struct fs_path *
+fs_table_lookup_blkdev(
+	const char	*bdev)
+{
+	return __fs_table_lookup_mount(NULL, bdev);
 }
 
 static int
