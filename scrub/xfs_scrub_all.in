@@ -48,7 +48,7 @@ def find_mounts():
 	result.wait()
 	if result.returncode != 0:
 		return fs
-	sarray = [x.decode('utf-8') for x in result.stdout.readlines()]
+	sarray = [x.decode(sys.stdout.encoding) for x in result.stdout.readlines()]
 	output = ' '.join(sarray)
 	bdevdata = json.loads(output)
 	# The lsblk output had better be in disks-then-partitions order
