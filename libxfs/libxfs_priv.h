@@ -138,6 +138,11 @@ enum ce { CE_DEBUG, CE_CONT, CE_NOTE, CE_WARN, CE_ALERT, CE_PANIC };
 	cmn_err(CE_ALERT, "%s: XFS_CORRUPTION_ERROR", (e));  \
 } while (0)
 
+#define xfs_corruption_error(e,l,mp,m,file,line,failaddr)	do { \
+	(mp) = (mp); \
+	cmn_err(CE_ALERT, "%s: XFS_CORRUPTION_ERROR at %p", (e), (failaddr));  \
+} while (0)
+
 #define XFS_ERROR_REPORT(e,l,mp)	do { \
 	(mp) = (mp); \
 	cmn_err(CE_ALERT, "%s: XFS_ERROR_REPORT", (e));  \
