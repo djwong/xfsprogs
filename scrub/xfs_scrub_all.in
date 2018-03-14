@@ -87,6 +87,28 @@ def run_killable(cmd, stdout, killfuncs, kill_fn):
 	except:
 		return -1
 
+# systemd doesn't like unit instance names with slashes in them, so it
+# replaces them with dashes when it invokes the service.  However, it's not
+# smart enough to convert the dashes to something else, so when it unescapes
+# the instance name to feed to xfs_scrub, it turns all dashes into slashes.
+# "/moo-cow" becomes "-moo-cow" becomes "/moo/cow", which is wrong.  systemd
+# actually /can/ escape the dashes correctly if it is told that this is a path
+# (and not a unit name), but it didn't do this prior to January 2017, so fix
+# this for them.
+def systemd_escape(path):
+	'''Escape a path to avoid mangled systemd mangling.'''
+
+	if '-' not in path:
+		return path
+	cmd = ['systemd-escape', '--path', path]
+	try:
+		proc = subprocess.Popen(cmd, stdout = subprocess.PIPE)
+		proc.wait()
+		for line in proc.stdout:
+			return '-' + line.decode(sys.stdout.encoding).strip()
+	except:
+		return path
+
 def run_scrub(mnt, cond, running_devs, mntdevs, killfuncs):
 	'''Run a scrub process.'''
 	global retcode, terminate
@@ -99,7 +121,7 @@ def run_scrub(mnt, cond, running_devs, mntdevs, killfuncs):
 			return
 
 		# Try it the systemd way
-		cmd=['systemctl', 'start', 'xfs_scrub@%s' % mnt]
+		cmd=['systemctl', 'start', 'xfs_scrub@%s' % systemd_escape(mnt)]
 		ret = run_killable(cmd, DEVNULL(), killfuncs, \
 				lambda proc: kill_systemd('xfs_scrub@%s' % mnt, proc))
 		if ret == 0 or ret == 1:
