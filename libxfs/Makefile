@@ -98,7 +98,7 @@ CFILES = cache.c \
 	xfs_trans_resv.c
 
 CFILES += $(PKG_PLATFORM).c
-PCFILES = darwin.c freebsd.c irix.c linux.c
+PCFILES = linux.c
 LSRCFILES = $(shell echo $(PCFILES) | sed -e "s/$(PKG_PLATFORM).c//g")
 LSRCFILES += gen_crc32table.c
 
