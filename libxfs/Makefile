@@ -97,9 +97,6 @@ CFILES = cache.c \
 	xfs_symlink_remote.c \
 	xfs_trans_resv.c
 
-CFILES += $(PKG_PLATFORM).c
-PCFILES = linux.c
-LSRCFILES = $(shell echo $(PCFILES) | sed -e "s/$(PKG_PLATFORM).c//g")
 LSRCFILES += gen_crc32table.c
 
 #

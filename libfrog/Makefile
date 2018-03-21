@@ -22,6 +22,10 @@ topology.c \
 util.c \
 workqueue.c
 
+CFILES += $(PKG_PLATFORM).c
+PCFILES = linux.c
+LSRCFILES = $(shell echo $(PCFILES) | sed -e "s/$(PKG_PLATFORM).c//g")
+
 ifeq ($(HAVE_GETMNTENT),yes)
 LCFLAGS += -DHAVE_GETMNTENT
 endif
