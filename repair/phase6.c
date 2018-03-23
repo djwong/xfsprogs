@@ -1195,7 +1195,8 @@ mv_orphanage(
 		xname.len = snprintf((char *)fname, sizeof(fname), "%llu.%d",
 					(unsigned long long)ino, ++incr);
 
-	err = -libxfs_iget(mp, NULL, ino, 0, &ino_p, &xfs_default_ifork_ops);
+	/* Orphans may not have a proper parent, so use custom ops here */
+	err = -libxfs_iget(mp, NULL, ino, 0, &ino_p, &phase6_ifork_ops);
 	if (err)
 		do_error(_("%d - couldn't iget disconnected inode\n"), err);
 
