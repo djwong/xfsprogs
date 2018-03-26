@@ -17,7 +17,6 @@
  */
 
 #include "libxfs.h"
-#include <linux/fs.h>
 #include "command.h"
 #include "init.h"
 #include "path.h"
